@@ -6,4 +6,5 @@ let
     then nixpkgs.haskell.packages.ghc821
     else nixpkgs.haskell.packages.${compiler};
 in
-haskellPackages.callPackage ./leaderboard.nix { }
+nixpkgs.haskell.lib.justStaticExecutables
+  (haskellPackages.callPackage ./leaderboard.nix { })
