@@ -1,39 +1,47 @@
 {-# language OverloadedStrings #-}
-{-# language TypeOperators #-}
 module Leaderboard.Database.Tables where
 
-import Database.Selda
+import Opaleye
+import Opaleye.Table
 
-import Leaderboard.Database.Types (PlayerRow, RatingRow)
+import Leaderboard.Types
 
-ratings :: Table RatingRow
-( ratings,
-    ratingID :*:
-    ratingValue :*:
-    ratingDev :*:
-    ratingVol :*:
-    ratingInactivity :*:
-    ratingAge
-  ) =
-  tableWithSelectors "ratings" $
-  autoPrimary "id" :*:
-  required "rating" :*:
-  required "dev" :*:
-  required "vol" :*:
-  required "inactivity" :*:
-  required "age"
+ratingTable :: Table RatingWrite RatingRead
+ratingTable =
+  Table "ratings" $
+  pRating Rating
+    { _ratingId = pRatingId . RatingId $ optional "id"
+    , _ratingValue = required "value"
+    , _ratingDev = required "dev"
+    , _ratingVol = required "vol"
+    , _ratingInactivity = required "inactivity"
+    , _ratingAge = required "age"
+    }
 
-players :: Table (PlayerRow RowID)
-( players,
-    playerID :*:
-    playerFirstName :*:
-    playerLastName :*:
-    playerEmail :*:
-    playerRating
-  ) =
-  tableWithSelectors "players" $
-  autoPrimary "id" :*:
-  required "firstName" :*:
-  optional "lastName" :*:
-  unique (required "email") :*:
-  fk (required "rating") (ratings, ratingID)
+playerTable :: Table PlayerWrite PlayerRead
+playerTable =
+  Table "players" $
+  pPlayer Player
+    { _playerId = pPlayerId . PlayerId $ optional "id"
+    , _playerFirstName = required "firstName"
+    , _playerLastName = optional "lastName"
+    , _playerEmail = required "email"
+    , _playerRating = pRatingId . RatingId $ required "ratingId"
+    }
+
+ladderTable :: Table LadderWrite LadderRead
+ladderTable =
+  Table "ladders" $
+  pLadder Ladder
+    { _ladderId = pLadderId . LadderId $ optional "id"
+    , _ladderName = required "name"
+    , _ladderOwner = pPlayerId . PlayerId $ required "ownerId"
+    }
+
+playerToLadderTable :: Table PlayerToLadderReadWrite PlayerToLadderReadWrite
+playerToLadderTable =
+  Table "playerToLadder" $
+  pPlayerToLadder PlayerToLadder
+    { _p2lPlayer = pPlayerId . PlayerId $ required "playerId"
+    , _p2lLadder = pLadderId . LadderId $ required "ladderId"
+    }

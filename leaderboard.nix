@@ -1,5 +1,5 @@
-{ mkDerivation, base, lens, selda, servant-server, stdenv, text
-, warp
+{ mkDerivation, base, lens, opaleye, product-profunctors
+, servant-server, stdenv, text, warp
 }:
 mkDerivation {
   pname = "leaderboard";
@@ -7,7 +7,9 @@ mkDerivation {
   src = ./.;
   isLibrary = true;
   isExecutable = true;
-  libraryHaskellDepends = [ base lens selda servant-server text ];
+  libraryHaskellDepends = [
+    base lens opaleye product-profunctors servant-server text
+  ];
   executableHaskellDepends = [ base warp ];
   license = stdenv.lib.licenses.bsd3;
 }
