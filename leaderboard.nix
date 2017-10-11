@@ -1,5 +1,6 @@
-{ mkDerivation, base, lens, opaleye, product-profunctors
-, servant-server, stdenv, text, warp
+{ mkDerivation, aeson, base, beam-core, beam-postgres, lens
+, opaleye, postgresql-simple, product-profunctors, servant-server
+, stdenv, text, warp
 }:
 mkDerivation {
   pname = "leaderboard";
@@ -8,7 +9,8 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base lens opaleye product-profunctors servant-server text
+    aeson base beam-core beam-postgres lens opaleye postgresql-simple
+    product-profunctors servant-server text
   ];
   executableHaskellDepends = [ base warp ];
   license = stdenv.lib.licenses.bsd3;

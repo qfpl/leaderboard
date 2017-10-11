@@ -1,69 +1,13 @@
 {-# language FlexibleInstances #-}
 {-# language MultiParamTypeClasses #-}
+{-# language OverloadedStrings #-}
 {-# language TemplateHaskell #-}
 {-# language TypeFamilies #-}
 {-# language TypeOperators #-}
-module Leaderboard.Types
-  ( -- * Rating
-    RatingRead
-  , RatingWrite
-  , RatingId
-  , RatingId'(..)
-  , Rating
-  , Rating'(..)
-    -- ** Lenses
-  , ratingId
-  , ratingRating
-  , ratingDev
-  , ratingVol
-  , ratingInactivity
-  , ratingAge
-    -- ** Product Profunctors
-  , pRatingId
-  , pRating
-    -- * Player
-  , PlayerRead
-  , PlayerWrite
-  , PlayerId
-  , PlayerId'(..)
-  , Player
-  , Player'(..)
-    -- ** Lenses
-  , playerId
-  , playerFirstName
-  , playerLastName
-  , playerEmail
-  , playerRating
-    -- ** Product Profunctors
-  , pPlayerId
-  , pPlayer
-    -- * Ladder
-  , LadderRead
-  , LadderWrite
-  , LadderId
-  , LadderId'(..)
-  , Ladder
-  , Ladder'(..)
-    -- ** Lenses
-  , ladderId
-  , ladderName
-  , ladderOwner
-    -- ** Product Profunctors
-  , pLadderId
-  , pLadder
-    -- * PlayerToLadder
-  , PlayerToLadderReadWrite
-  , PlayerToLadder
-  , PlayerToLadder'(..)
-    -- ** Lenses
-  , p2lPlayer
-  , p2lLadder
-    -- ** Product Profunctors
-  , pPlayerToLadder
-  )
-where
+module Leaderboard.Models.Internal where
 
-import Control.Lens
+import Data.Aeson
+import Control.Lens (makeLenses)
 import Data.Profunctor.Product.TH
 import Data.Text
 import Opaleye
@@ -125,6 +69,17 @@ data Player' a b c d e
   , _playerRating :: e
   }
   deriving (Eq, Show, Ord)
+
+instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e) =>
+  ToJSON (Player' a b c d e) where
+  toJSON (Player a b c d e) =
+    object
+      [ "id" .= a
+      , "firstName" .= b
+      , "lastName" .= c
+      , "email" .= d
+      , "rating" .= e
+      ]
 
 type PlayerRead =
   Player'
@@ -194,6 +149,46 @@ type PlayerToLadderReadWrite =
 type PlayerToLadder = PlayerToLadder' PlayerId LadderId 
 
 $(makeAdaptorAndInstance "pPlayerToLadder" ''PlayerToLadder')
+
+ratingTable :: Table RatingWrite RatingRead
+ratingTable =
+  Table "ratings" $
+  pRating Rating
+    { _ratingId = pRatingId . RatingId $ optional "id"
+    , _ratingRating = required "value"
+    , _ratingDev = required "dev"
+    , _ratingVol = required "vol"
+    , _ratingInactivity = required "inactivity"
+    , _ratingAge = required "age"
+    }
+
+playerTable :: Table PlayerWrite PlayerRead
+playerTable =
+  Table "players" $
+  pPlayer Player
+    { _playerId = pPlayerId . PlayerId $ optional "id"
+    , _playerFirstName = required "firstName"
+    , _playerLastName = optional "lastName"
+    , _playerEmail = required "email"
+    , _playerRating = pRatingId . RatingId $ required "rating"
+    }
+
+ladderTable :: Table LadderWrite LadderRead
+ladderTable =
+  Table "ladders" $
+  pLadder Ladder
+    { _ladderId = pLadderId . LadderId $ optional "id"
+    , _ladderName = required "name"
+    , _ladderOwner = pPlayerId . PlayerId $ required "owner"
+    }
+
+playerToLadderTable :: Table PlayerToLadderReadWrite PlayerToLadderReadWrite
+playerToLadderTable =
+  Table "playerToLadder" $
+  pPlayerToLadder PlayerToLadder
+    { _p2lPlayer = pPlayerId . PlayerId $ required "player"
+    , _p2lLadder = pLadderId . LadderId $ required "ladder"
+    }
 
 makeLenses ''Player'
 makeLenses ''Rating'
