@@ -1,8 +1,13 @@
-{ mkDerivation, base, selda, servant, stdenv }:
+{ mkDerivation, base, lens, selda, servant-server, stdenv, text
+, warp
+}:
 mkDerivation {
   pname = "leaderboard";
   version = "0.1.0.0";
   src = ./.;
-  libraryHaskellDepends = [ base selda servant ];
+  isLibrary = true;
+  isExecutable = true;
+  libraryHaskellDepends = [ base lens selda servant-server text ];
+  executableHaskellDepends = [ base warp ];
   license = stdenv.lib.licenses.bsd3;
 }
