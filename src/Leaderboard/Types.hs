@@ -13,7 +13,7 @@ module Leaderboard.Types
   , Rating'(..)
     -- ** Lenses
   , ratingId
-  , ratingValue
+  , ratingRating
   , ratingDev
   , ratingVol
   , ratingInactivity
@@ -78,7 +78,7 @@ $(makeAdaptorAndInstance "pRatingId" ''RatingId')
 data Rating' a b c d e f
   = Rating
   { _ratingId :: a
-  , _ratingValue :: b
+  , _ratingRating :: b
   , _ratingDev :: c
   , _ratingVol :: d
   , _ratingInactivity :: e

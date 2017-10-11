@@ -11,7 +11,7 @@ ratingTable =
   Table "ratings" $
   pRating Rating
     { _ratingId = pRatingId . RatingId $ optional "id"
-    , _ratingValue = required "value"
+    , _ratingRating = required "value"
     , _ratingDev = required "dev"
     , _ratingVol = required "vol"
     , _ratingInactivity = required "inactivity"
@@ -26,7 +26,7 @@ playerTable =
     , _playerFirstName = required "firstName"
     , _playerLastName = optional "lastName"
     , _playerEmail = required "email"
-    , _playerRating = pRatingId . RatingId $ required "ratingId"
+    , _playerRating = pRatingId . RatingId $ required "rating"
     }
 
 ladderTable :: Table LadderWrite LadderRead
@@ -35,13 +35,13 @@ ladderTable =
   pLadder Ladder
     { _ladderId = pLadderId . LadderId $ optional "id"
     , _ladderName = required "name"
-    , _ladderOwner = pPlayerId . PlayerId $ required "ownerId"
+    , _ladderOwner = pPlayerId . PlayerId $ required "owner"
     }
 
 playerToLadderTable :: Table PlayerToLadderReadWrite PlayerToLadderReadWrite
 playerToLadderTable =
   Table "playerToLadder" $
   pPlayerToLadder PlayerToLadder
-    { _p2lPlayer = pPlayerId . PlayerId $ required "playerId"
-    , _p2lLadder = pLadderId . LadderId $ required "ladderId"
+    { _p2lPlayer = pPlayerId . PlayerId $ required "player"
+    , _p2lLadder = pLadderId . LadderId $ required "ladder"
     }
