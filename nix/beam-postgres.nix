@@ -1,4 +1,2 @@
 { haskellPackages, beam }:
-  haskellPackages.callPackage
-    (import "${beam.postgres}/beam-postgres.nix")
-    {}
+haskellPackages.callCabal2nix "beam-postgres" beam.postgres {}

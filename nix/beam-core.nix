@@ -1,4 +1,2 @@
 { haskellPackages, beam }:
-haskellPackages.callPackage
-  (import "${beam.core}/beam-core.nix")
-  {}
+haskellPackages.callCabal2nix "beam-core" beam.core {}

@@ -1,4 +1,2 @@
 { haskellPackages, beam }:
-haskellPackages.callPackage
-  (import "${beam.migrate}/beam-migrate.nix")
-  {}
+haskellPackages.callCabal2nix "beam-migrate" beam.migrate {}
