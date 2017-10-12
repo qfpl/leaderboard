@@ -1,21 +1,12 @@
 module Leaderboard.Models.Ladder
-  ( -- * Ladder
-    -- ** Database schema
-    ladderTable
-    -- ** Datatypes
-  , LadderRead
-  , LadderWrite
-  , LadderId
-  , LadderId'
+  ( -- ** Datatypes
+    LadderId
   , Ladder
-  , Ladder'(..)
+  , LadderT(..)
     -- ** Lenses
   , ladderId
   , ladderName
   , ladderOwner
-    -- ** Product Profunctors
-  , pLadderId
-  , pLadder
   )
 where
 

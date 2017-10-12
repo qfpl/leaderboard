@@ -1,196 +1,136 @@
+{-# language DeriveGeneric #-}
 {-# language FlexibleInstances #-}
 {-# language MultiParamTypeClasses #-}
 {-# language OverloadedStrings #-}
+{-# language StandaloneDeriving #-}
 {-# language TemplateHaskell #-}
 {-# language TypeFamilies #-}
 {-# language TypeOperators #-}
 module Leaderboard.Models.Internal where
 
-import Data.Aeson
 import Control.Lens (makeLenses)
-import Data.Profunctor.Product.TH
+import Data.Aeson
 import Data.Text
-import Opaleye
+import Database.Beam
 
-newtype RatingId' a = RatingId { getRatingId :: a }
-  deriving (Eq, Show, Ord)
-
-type RatingId = RatingId' Int
-
-$(makeAdaptorAndInstance "pRatingId" ''RatingId')
-
-data Rating' a b c d e f
+data RatingT f
   = Rating
-  { _ratingId :: a
-  , _ratingRating :: b
-  , _ratingDev :: c
-  , _ratingVol :: d
-  , _ratingInactivity :: e
-  , _ratingAge :: f
+  { _ratingId :: Columnar f (Auto Int)
+  , _ratingRating :: Columnar f Double
+  , _ratingDev :: Columnar f Double
+  , _ratingVol :: Columnar f Double
+  , _ratingInactivity :: Columnar f Int
+  , _ratingAge :: Columnar f Int
   }
-  deriving (Eq, Show, Ord)
+  deriving Generic
 
-$(makeAdaptorAndInstance "pRating" ''Rating')
+type Rating = RatingT Identity
+type RatingId = PrimaryKey RatingT Identity
 
-type RatingRead =
-  Rating'
-    (RatingId' (Column PGInt4))
-    (Column PGFloat8)
-    (Column PGFloat8)
-    (Column PGFloat8)
-    (Column PGInt4)
-    (Column PGInt4)
+deriving instance Eq Rating
+deriving instance Show Rating
+deriving instance Ord Rating
 
-type RatingWrite =
-  Rating'
-    (RatingId' (Maybe (Column PGInt4)))
-    (Column PGFloat8)
-    (Column PGFloat8)
-    (Column PGFloat8)
-    (Column PGInt4)
-    (Column PGInt4)
+deriving instance Eq RatingId
+deriving instance Show RatingId
+deriving instance Ord RatingId
 
-type Rating = Rating' RatingId Double Double Double Int Int
+instance Beamable RatingT
+instance Table RatingT where
+  data PrimaryKey RatingT f = RatingId (Columnar f (Auto Int)) deriving Generic
+  primaryKey = RatingId . _ratingId
+
+instance Beamable (PrimaryKey RatingT)
 
 
-newtype PlayerId' a = PlayerId { getPlayerId :: a }
-  deriving (Eq, Show, Ord)
-
-type PlayerId = PlayerId' Int
-
-$(makeAdaptorAndInstance "pPlayerId" ''PlayerId')
-
-data Player' a b c d e
+data PlayerT f
   = Player
-  { _playerId :: a
-  , _playerFirstName :: b
-  , _playerLastName :: c
-  , _playerEmail :: d
-  , _playerRating :: e
+  { _playerId :: Columnar f (Auto Int)
+  , _playerFirstName :: Columnar f Text
+  , _playerLastName :: Columnar f (Maybe Text)
+  , _playerEmail :: Columnar f Text
   }
-  deriving (Eq, Show, Ord)
+  deriving Generic
 
-instance (ToJSON a, ToJSON b, ToJSON c, ToJSON d, ToJSON e) =>
-  ToJSON (Player' a b c d e) where
-  toJSON (Player a b c d e) =
+type Player = PlayerT Identity
+type PlayerId = PrimaryKey PlayerT Identity
+
+instance ToJSON Player where
+  toJSON (Player (Auto a) b c d) =
     object
       [ "id" .= a
       , "firstName" .= b
       , "lastName" .= c
       , "email" .= d
-      , "rating" .= e
       ]
 
-type PlayerRead =
-  Player'
-    (PlayerId' (Column PGInt4))
-    (Column PGText)
-    (Column (Nullable PGText))
-    (Column PGText)
-    (RatingId' (Column PGInt4))
+deriving instance Eq Player
+deriving instance Show Player
+deriving instance Ord Player
 
-type PlayerWrite =
-  Player'
-    (PlayerId' (Maybe (Column PGInt4)))
-    (Column PGText)
-    (Maybe (Column (Nullable PGText)))
-    (Column PGText)
-    (RatingId' (Column PGInt4))
+deriving instance Eq PlayerId
+deriving instance Show PlayerId
+deriving instance Ord PlayerId
 
-type Player = Player' PlayerId Text (Maybe Text) Text RatingId
+instance Beamable PlayerT
+instance Table PlayerT where
+  data PrimaryKey PlayerT f = PlayerId (Columnar f (Auto Int)) deriving Generic
+  primaryKey = PlayerId . _playerId
 
-$(makeAdaptorAndInstance "pPlayer" ''Player')
+instance Beamable (PrimaryKey PlayerT)
 
 
-newtype LadderId' a = LadderId { getLadderId :: a }
-  deriving (Eq, Show, Ord)
-
-type LadderId = LadderId' Int
-
-$(makeAdaptorAndInstance "pLadderId" ''LadderId')
-
-data Ladder' a b c
+data LadderT f
   = Ladder
-  { _ladderId :: a
-  , _ladderName :: b
-  , _ladderOwner :: c
+  { _ladderId :: Columnar f (Auto Int)
+  , _ladderName :: Columnar f Text
+  , _ladderOwner :: PrimaryKey PlayerT f
   }
-  deriving (Eq, Show, Ord)
+  deriving Generic
 
-type LadderRead =
-  Ladder'
-    (LadderId' (Column PGInt4))
-    (Column PGText)
-    (PlayerId' (Column PGInt4))
+deriving instance Eq Ladder
+deriving instance Show Ladder
+deriving instance Ord Ladder
 
-type LadderWrite =
-  Ladder'
-    (LadderId' (Maybe (Column PGInt4)))
-    (Column PGText)
-    (PlayerId' (Column PGInt4))
+deriving instance Eq LadderId
+deriving instance Show LadderId
+deriving instance Ord LadderId
 
-type Ladder = Ladder' LadderId Text PlayerId
+type Ladder = LadderT Identity
+type LadderId = PrimaryKey LadderT Identity
 
-$(makeAdaptorAndInstance "pLadder" ''Ladder')
+instance Beamable LadderT
+instance Table LadderT where
+  data PrimaryKey LadderT f = LadderId (Columnar f (Auto Int)) deriving Generic
+  primaryKey = LadderId . _ladderId
+
+instance Beamable (PrimaryKey LadderT)
 
 
-data PlayerToLadder' a b
+data PlayerToLadderT f
   = PlayerToLadder
-  { _p2lPlayer :: a
-  , _p2lLadder :: b
+  { _p2lPlayer :: PrimaryKey PlayerT f
+  , _p2lLadder :: PrimaryKey LadderT f
+  , _p2lRating :: PrimaryKey RatingT f
   }
-  deriving (Eq, Show, Ord)
+  deriving Generic
 
-type PlayerToLadderReadWrite =
-  PlayerToLadder'
-    (PlayerId' (Column PGInt4))
-    (LadderId' (Column PGInt4))
+deriving instance Eq PlayerToLadder
+deriving instance Show PlayerToLadder
+deriving instance Ord PlayerToLadder
 
-type PlayerToLadder = PlayerToLadder' PlayerId LadderId 
+type PlayerToLadder = PlayerToLadderT Identity
 
-$(makeAdaptorAndInstance "pPlayerToLadder" ''PlayerToLadder')
+instance Beamable PlayerToLadderT
+instance Table PlayerToLadderT where
+  data PrimaryKey PlayerToLadderT f
+    = PlayerToLadderKey (PrimaryKey PlayerT f) (PrimaryKey LadderT f)
+      deriving Generic
+  primaryKey = PlayerToLadderKey <$> _p2lPlayer <*> _p2lLadder
 
-ratingTable :: Table RatingWrite RatingRead
-ratingTable =
-  Table "ratings" $
-  pRating Rating
-    { _ratingId = pRatingId . RatingId $ optional "id"
-    , _ratingRating = required "value"
-    , _ratingDev = required "dev"
-    , _ratingVol = required "vol"
-    , _ratingInactivity = required "inactivity"
-    , _ratingAge = required "age"
-    }
+instance Beamable (PrimaryKey PlayerToLadderT)
 
-playerTable :: Table PlayerWrite PlayerRead
-playerTable =
-  Table "players" $
-  pPlayer Player
-    { _playerId = pPlayerId . PlayerId $ optional "id"
-    , _playerFirstName = required "firstName"
-    , _playerLastName = optional "lastName"
-    , _playerEmail = required "email"
-    , _playerRating = pRatingId . RatingId $ required "rating"
-    }
-
-ladderTable :: Table LadderWrite LadderRead
-ladderTable =
-  Table "ladders" $
-  pLadder Ladder
-    { _ladderId = pLadderId . LadderId $ optional "id"
-    , _ladderName = required "name"
-    , _ladderOwner = pPlayerId . PlayerId $ required "owner"
-    }
-
-playerToLadderTable :: Table PlayerToLadderReadWrite PlayerToLadderReadWrite
-playerToLadderTable =
-  Table "playerToLadder" $
-  pPlayerToLadder PlayerToLadder
-    { _p2lPlayer = pPlayerId . PlayerId $ required "player"
-    , _p2lLadder = pLadderId . LadderId $ required "ladder"
-    }
-
-makeLenses ''Player'
-makeLenses ''Rating'
-makeLenses ''Ladder'
-makeLenses ''PlayerToLadder'
+makeLenses ''PlayerT
+makeLenses ''RatingT
+makeLenses ''LadderT
+makeLenses ''PlayerToLadderT

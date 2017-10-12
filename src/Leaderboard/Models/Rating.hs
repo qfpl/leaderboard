@@ -1,14 +1,8 @@
 module Leaderboard.Models.Rating
-  ( -- * Rating
-    -- ** Database schema
-    ratingTable
-    -- ** Datatypes
-  , RatingRead
-  , RatingWrite
-  , RatingId
-  , RatingId'
+  ( -- ** Datatypes
+    RatingId
   , Rating
-  , Rating'(..)
+  , RatingT(..)
     -- ** Lenses
   , ratingId
   , ratingRating
@@ -16,9 +10,6 @@ module Leaderboard.Models.Rating
   , ratingVol
   , ratingInactivity
   , ratingAge
-    -- ** Product Profunctors
-  , pRatingId
-  , pRating
   )
 where
 

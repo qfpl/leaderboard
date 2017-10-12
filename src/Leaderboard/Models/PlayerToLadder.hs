@@ -1,16 +1,11 @@
 module Leaderboard.Models.PlayerToLadder
-  ( -- * PlayerToLadder
-    -- ** Database schema
-    playerToLadderTable
-    -- ** Datatypes
-  , PlayerToLadderReadWrite
-  , PlayerToLadder
-  , PlayerToLadder'(..)
+  ( -- ** Datatypes
+    PlayerToLadder
+  , PlayerToLadderT(..)
     -- ** Lenses
   , p2lPlayer
   , p2lLadder
-    -- ** Product Profunctors
-  , pPlayerToLadder
+  , p2lRating
   )
 where
 

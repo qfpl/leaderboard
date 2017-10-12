@@ -1,22 +1,13 @@
 module Leaderboard.Models.Player
-  ( -- * Database schema
-    playerTable
-    -- * Datatypes
-  , PlayerRead
-  , PlayerWrite
-  , PlayerId
-  , PlayerId'
+  ( -- * Datatypes
+    PlayerId
   , Player
-  , Player'(..)
+  , PlayerT(..)
     -- ** Lenses
   , playerId
   , playerFirstName
   , playerLastName
   , playerEmail
-  , playerRating
-    -- ** Product Profunctors
-  , pPlayerId
-  , pPlayer
   )
 where
 

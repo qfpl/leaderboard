@@ -1,14 +1,12 @@
-{-# language DataKinds #-}
-{-# language OverloadedStrings #-}
 module Leaderboard.Application (leaderboard) where
 
+import Database.Beam.Postgres
 import Servant
-import Data.Text (Text)
 
-type LeaderboardAPI = Get '[PlainText] Text
+import Leaderboard.API
+import Leaderboard.Server
 
-leaderboardServer :: Server LeaderboardAPI
-leaderboardServer = pure "test"
-
-leaderboard :: Application
-leaderboard = serve (Proxy :: Proxy LeaderboardAPI) leaderboardServer
+leaderboard :: Connection -> Application
+leaderboard conn =
+  serve (Proxy :: Proxy LeaderboardAPI) $
+  enter (toHandler conn) leaderboardServer
