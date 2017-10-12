@@ -1,11 +1,13 @@
 {-# language DeriveGeneric #-}
-{-# language TemplateHaskell #-}
-module Leaderboard.Database where
+module Leaderboard.Database.Migrations where
 
-import Control.Lens (makeLenses)
 import Database.Beam
+import Database.Beam.Migrate
+import Database.Beam.Postgres
 
 import Leaderboard.Models.Internal
+
+import qualified Leaderboard.Database.Migrations.V_0_0_1 as V_0_0_1
 
 data LeaderboardDb f
   = LeaderboardDb
@@ -18,7 +20,8 @@ data LeaderboardDb f
 
 instance Database LeaderboardDb
 
-leaderboardDb :: DatabaseSettings backend LeaderboardDb
-leaderboardDb = defaultDbSettings
+leaderboardDb :: DatabaseSettings Postgres LeaderboardDb
+leaderboardDb = unCheckDatabase $ evaluateDatabase migrations
 
-makeLenses ''LeaderboardDb
+migrations :: MigrationSteps PgCommandSyntax () (CheckedDatabaseSettings Postgres LeaderboardDb)
+migrations = _

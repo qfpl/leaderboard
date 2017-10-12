@@ -11,8 +11,7 @@ import Database.Beam
 import Database.Beam.Backend.SQL.BeamExtensions
 import Servant
 
-import Leaderboard.Database
-import Leaderboard.Models.Player
+import Leaderboard.Schema
 import Leaderboard.Server
 
 data RegisterPlayer

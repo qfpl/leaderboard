@@ -1,17 +1,18 @@
 {-# language DeriveGeneric #-}
 {-# language FlexibleInstances #-}
-{-# language MultiParamTypeClasses #-}
 {-# language OverloadedStrings #-}
 {-# language StandaloneDeriving #-}
 {-# language TemplateHaskell #-}
 {-# language TypeFamilies #-}
-{-# language TypeOperators #-}
-module Leaderboard.Models.Internal where
+module Leaderboard.Schema.V_0_0_1 where
 
 import Control.Lens (makeLenses)
 import Data.Aeson
-import Data.Text
+import Data.Text (Text)
 import Database.Beam
+import Database.Beam.Migrate
+import Database.Beam.Postgres
+import Database.Beam.Postgres.Migrate
 
 data RatingT f
   = Rating
@@ -41,7 +42,6 @@ instance Table RatingT where
   primaryKey = RatingId . _ratingId
 
 instance Beamable (PrimaryKey RatingT)
-
 
 data PlayerT f
   = Player
@@ -130,6 +130,48 @@ instance Table PlayerToLadderT where
 
 instance Beamable (PrimaryKey PlayerToLadderT)
 
+data LeaderboardDb f
+  = LeaderboardDb
+  { _leaderboardRatings :: f (TableEntity RatingT)
+  , _leaderboardPlayers :: f (TableEntity PlayerT)
+  , _leaderboardLadders :: f (TableEntity LadderT)
+  , _leaderboardPlayerToLadder :: f (TableEntity PlayerToLadderT)
+  }
+  deriving Generic
+
+instance Database LeaderboardDb
+
+migration :: () -> Migration PgCommandSyntax (CheckedDatabaseSettings Postgres LeaderboardDb)
+migration () =
+  LeaderboardDb <$>
+  createTable "ratings"
+    (Rating
+      (field "id" serial)
+      (field "rating" double notNull)
+      (field "dev" double notNull)
+      (field "vol" double notNull)
+      (field "inactivity" int notNull)
+      (field "age" int notNull)) <*>
+  createTable "players"
+    (Player
+      (field "id" serial)
+      (field "firstName" (varchar Nothing) notNull)
+      (field "lastName" (varchar Nothing))
+      (field "email" (varchar Nothing) notNull)
+    ) <*>
+  createTable "ladders"
+    (Ladder
+      (field "id" serial)
+      (field "name" (varchar Nothing) notNull)
+      (PlayerId $ field "owner" int notNull)
+    ) <*>
+  createTable "playerToLadder"
+    (PlayerToLadder
+      (PlayerId $ field "player" int notNull)
+      (LadderId $ field "ladder" int notNull)
+      (RatingId $ field "rating" int notNull))
+
+makeLenses ''LeaderboardDb
 makeLenses ''PlayerT
 makeLenses ''RatingT
 makeLenses ''LadderT
