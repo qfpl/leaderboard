@@ -1,12 +1,12 @@
 module Leaderboard.Application (leaderboard) where
 
-import Database.Beam.Postgres
+import Control.Monad.Log (Logger)
 import Servant
 
 import Leaderboard.API
 import Leaderboard.Server
 
-leaderboard :: Connection -> Application
-leaderboard conn =
+leaderboard :: Environment -> Logger () -> Application
+leaderboard env logger =
   serve (Proxy :: Proxy LeaderboardAPI) $
-  enter (toHandler conn) leaderboardServer
+  enter (toHandler env logger) leaderboardServer

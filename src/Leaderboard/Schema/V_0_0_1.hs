@@ -46,9 +46,9 @@ instance Beamable (PrimaryKey RatingT)
 data PlayerT f
   = Player
   { _playerId :: Columnar f (Auto Int)
-  , _playerFirstName :: Columnar f Text
-  , _playerLastName :: Columnar f (Maybe Text)
+  , _playerUsername :: Columnar f (Maybe Text)
   , _playerEmail :: Columnar f Text
+  , _playerOAuthID :: Columnar f Text
   }
   deriving Generic
 
@@ -56,12 +56,11 @@ type Player = PlayerT Identity
 type PlayerId = PrimaryKey PlayerT Identity
 
 instance ToJSON Player where
-  toJSON (Player (Auto a) b c d) =
+  toJSON (Player (Auto a) b c _) =
     object
       [ "id" .= a
-      , "firstName" .= b
-      , "lastName" .= c
-      , "email" .= d
+      , "username" .= b
+      , "email" .= c
       ]
 
 deriving instance Eq Player

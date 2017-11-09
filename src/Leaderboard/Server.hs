@@ -1,41 +1,73 @@
 {-# language DataKinds #-}
 {-# language FlexibleContexts #-}
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language TemplateHaskell #-}
 {-# language TypeOperators #-}
 module Leaderboard.Server where
 
+import Control.Lens
+import Control.Monad.Log
 import Control.Monad.Reader
 import Control.Monad.Except
 import Database.Beam
 import Database.Beam.Postgres
+import Network.OAuth.OAuth2
 import Servant
 
-newtype LHandler a
+class HasConnection env where
+  connection :: Lens' env Connection
+
+class HasOAuth2 env where
+  oauth2 :: Lens' env OAuth2
+
+data Environment
+  = Environment
+  { _envConnection :: Connection
+  , _envOAuth2 :: OAuth2
+  } deriving Eq
+
+makeLenses ''Environment
+
+instance HasConnection Environment where
+  connection = envConnection
+
+instance HasOAuth2 Environment where
+  oauth2 = envOAuth2
+
+newtype LHandler env a
   = LHandler
-  { runLHandler :: ReaderT Connection Handler a
+  { runLHandler
+    :: ReaderT env (ExceptT ServantErr (LogT () IO)) a
   } deriving
   ( Functor
   , Applicative
   , Monad
-  , MonadReader Connection
+  , MonadReader env
   , MonadError ServantErr
+  , MonadLog ()
   , MonadIO
   )
 
-type LServer api = ServerT api LHandler
+type LServer env api = ServerT api (LHandler env)
 
 liftQuery
-  :: ( MonadBeam syntax be handle m
+  :: ( MonadBeam syntax be Connection m
      , MonadIO n
-     , MonadReader handle n
+     , MonadReader env n
+     , HasConnection env
      )
   => (q -> m a)
   -> q
   -> n a
 liftQuery q m = do
-  conn <- ask
+  conn <- view connection
   liftIO $ withDatabase conn (q m)
 
-toHandler :: Connection -> (LHandler :~> Handler)
-toHandler conn =
-  NT $ \lh -> runReaderT (runLHandler lh) conn
+toHandler :: env -> Logger () -> (LHandler env :~> Handler)
+toHandler env l =
+  NT $
+    Handler . ExceptT .
+    flip runLogT l .
+    runExceptT .
+    flip runReaderT env .
+    runLHandler

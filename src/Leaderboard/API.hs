@@ -13,7 +13,11 @@ type LeaderboardAPI =
   Get '[PlainText] Text :<|>
   PlayerAPI
 
-leaderboardServer :: LServer LeaderboardAPI
+leaderboardServer
+  :: ( HasOAuth2 env
+     , HasConnection env
+     )
+  => LServer env LeaderboardAPI
 leaderboardServer =
   pure "test" :<|>
   playerAPI

@@ -4,7 +4,7 @@ let
   inherit (nixpkgs) pkgs;
 
   haskellPackages =
-    import ./nix/haskellPackagesWithBeam.nix { inherit nixpkgs compiler; };
+    import ./nix/modifiedHaskellPackages.nix { inherit nixpkgs compiler; };
 
   drv =
     pkgs.haskell.lib.overrideCabal

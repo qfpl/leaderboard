@@ -1,9 +1,13 @@
+{ oauthClientID, oauthClientSecret }:
 let
   port = 8080;
   pgPort = 5432;
   pgUser = "test";
   pgDb = "leaderboard";
-  pgPassword = "testPassword";
+  pgPassword = "testPassword";j
+  oauthAuthorizeEndpoint = "https://accounts.google.com/o/oauth2/auth";
+  oauthAccessTokenEndpoint = "https://www.googleapis.com/oauth2/v3/token";
+  oauthCallback = ;
   initScript = ''
     create role ${pgUser} password '${pgPassword}' createdb nocreaterole nosuperuser login;
     create database ${pgDb};
@@ -43,7 +47,14 @@ in
               --db_name ${pgDb} \
               --port ${toString port} \
           '';
-          Environment = "DB_PASS=${pgPassword}";
+          Environment = ''
+            DB_PASS=${pgPassword}
+            OAUTH_CLIENT_ID=${oauthClientID}
+            OAUTH_CLIENT_SECRET=${oauthClientSecretID}
+            OAUTH_AUTHORIZE_ENDPOINT=${oauthAuthorizeEndpoint}
+            OAUTH_ACCESS_TOKEN_ENDPOINT=${oauthAccessTokenEndpoint}
+            OAUTH_CALLBACK=${oauthCallback}
+          '';
           StandardOutput = "syslog";
           StandardError = "syslog";
         };

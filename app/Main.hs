@@ -1,14 +1,22 @@
-import Network.Wai.Handler.Warp
-
 import Control.Exception
+import Control.Monad.Log
+  (makeDefaultLogger, simpleTimeFormat, LogType(..), levelDebug)
 import Control.Retry
+import Data.Either
 import Data.Monoid
 import Data.Word (Word16)
 import Database.PostgreSQL.Simple
+import Network.OAuth.OAuth2
+import Network.Wai.Handler.Warp
 import Options.Applicative
 import System.Environment
+import URI.ByteString
+
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.Text as T
 
 import Leaderboard.Application (leaderboard)
+import Leaderboard.Server (Environment(..))
 
 data ApplicationOptions
   = ApplicationOptions
@@ -42,11 +50,32 @@ parserInfo =
     (applicationOptionsParser <**> helper)
     (fullDesc <> progDesc "Run the leaderboard webapp")
 
+makeOAuth2 :: IO OAuth2
+makeOAuth2 =
+  OAuth2 <$>
+  (T.pack <$> getEnv "OAUTH_CLIENT_ID") <*>
+  (T.pack <$> getEnv "OAUTH_CLIENT_SECRET") <*>
+  unsafeParseURIEnvVar "OAUTH_AUTHORIZE_ENDPOINT" <*>
+  unsafeParseURIEnvVar "OAUTH_ACCESS_TOKEN_ENDPOINT" <*>
+  (Just <$> unsafeParseURIEnvVar "OAUTH_CALLBACK")
+  where
+    unsafeParseURIEnvVar s = 
+      fromRight (Prelude.error $ s <> " does not contain a valid URI").
+      parseURI laxURIParserOptions .
+      C8.pack <$>
+      getEnv s
+
 main :: IO ()
 main = do
   putStrLn "leaderboard started"
   opts <- execParser parserInfo
   password <- getEnv "DB_PASS"
+
+  logger <-
+    makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
+
+  oauth2 <- makeOAuth2
+
   let connInfo =
         ConnectInfo
         { connectHost = aoDbHost opts
@@ -55,6 +84,13 @@ main = do
         , connectPassword = password
         , connectDatabase = aoDbName opts
         }
+
+  let mkEnv conn =
+        Environment
+        { _envConnection = conn
+        , _envOAuth2 = oauth2
+        }
+
   bracket
     (recovering
       (constantDelay 1000)
@@ -65,5 +101,5 @@ main = do
       (const (putStrLn "Connecting to database.." *> connect connInfo)))
     (\conn -> do
         putStrLn "Connected to database."
-        run (aoPort opts) $ leaderboard conn)
+        run (aoPort opts) $ leaderboard (mkEnv conn) logger)
     close
