@@ -11,28 +11,20 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Database.Beam
 import Database.Beam.Postgres
-import Network.OAuth.OAuth2
 import Servant
 
 class HasConnection env where
   connection :: Lens' env Connection
 
-class HasOAuth2 env where
-  oauth2 :: Lens' env OAuth2
-
 data Environment
   = Environment
   { _envConnection :: Connection
-  , _envOAuth2 :: OAuth2
   } deriving Eq
 
 makeLenses ''Environment
 
 instance HasConnection Environment where
   connection = envConnection
-
-instance HasOAuth2 Environment where
-  oauth2 = envOAuth2
 
 newtype LHandler env a
   = LHandler
