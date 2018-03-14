@@ -60,7 +60,7 @@ makeOAuth2 =
   (Just <$> unsafeParseURIEnvVar "OAUTH_CALLBACK")
   where
     unsafeParseURIEnvVar s = 
-      fromRight (Prelude.error $ s <> " does not contain a valid URI").
+      either (Prelude.error $ s <> " does not contain a valid URI") id.
       parseURI laxURIParserOptions .
       C8.pack <$>
       getEnv s
