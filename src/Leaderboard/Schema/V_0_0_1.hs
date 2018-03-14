@@ -47,10 +47,10 @@ instance Beamable (PrimaryKey RatingT)
 
 data PlayerT f
   = Player
-  { _playerId       :: Columnar f (Auto Int)
-  , _playerUsername :: Columnar f (Maybe Text)
-  , _playerEmail    :: Columnar f Text
-  , _playerIsAdmin  :: Columnar f (Auto Bool)
+  { _playerId       :: C f (Auto Int)
+  , _playerUsername :: C f (Maybe Text)
+  , _playerEmail    :: C f Text
+  , _playerIsAdmin  :: C f (Auto Bool)
   }
   deriving Generic
 
