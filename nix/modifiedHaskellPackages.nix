@@ -4,7 +4,7 @@ let
   monad-log = import ./monad-log.nix;
 in
 (if compiler == "default"
-then nixpkgs.haskell.packages.ghc821
+then nixpkgs.haskell.packages.ghc802
 else nixpkgs.haskell.packages.${compiler}).override {
   overrides = self: super: {
     beam-core =

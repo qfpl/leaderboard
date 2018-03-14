@@ -6,7 +6,7 @@ module Leaderboard.API where
 import Data.Text (Text)
 import Servant
 
-import Leaderboard.API.Player
+import Leaderboard.API.Player (playerAPI)
 import Leaderboard.Server
 
 type LeaderboardAPI =
@@ -14,9 +14,7 @@ type LeaderboardAPI =
   PlayerAPI
 
 leaderboardServer
-  :: ( HasOAuth2 env
-     , HasConnection env
-     )
+  :: HasConnection env
   => LServer env LeaderboardAPI
 leaderboardServer =
   pure "test" :<|>
