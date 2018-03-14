@@ -13,26 +13,28 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Aeson
 import Data.Monoid
-import Data.Text
+import Data.Text (Text)
 import Database.Beam
 import Database.Beam.Backend.SQL.BeamExtensions
 import Network.HTTP.Client.TLS
-import Servant
+import Servant (Server)
 import URI.ByteString.QQ
 
 import Leaderboard.Schema
 import Leaderboard.Server
 
 data RegisterPlayer
-  = GoogleRegistration
-  { token :: Text
-  }
+  = LeaderboardRegistration
+    { _lbrEmail    :: Text
+    , _lbrName     :: Text
+    , _lbrPassword :: Text
+    }
   deriving Generic
 
 instance FromJSON RegisterPlayer where
 
-type PlayerAPI =
-  "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Player
+type PlayerAPI auths =
+  "register" :> Auth auths User :> '[JSON] RegisterPlayer :> Post '[JSON] Player
 
 data AuthResult
   = AuthResult
@@ -41,4 +43,7 @@ data AuthResult
   , email :: Text
   } deriving (Generic, Show, Eq)
 instance FromJSON AuthResult
+
+playerAPI :: AuthResult User -> Player
+playerAPI = undefined
 

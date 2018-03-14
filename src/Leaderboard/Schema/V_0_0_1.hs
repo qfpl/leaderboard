@@ -8,6 +8,7 @@ module Leaderboard.Schema.V_0_0_1 where
 
 import Control.Lens (makeLenses)
 import Data.Aeson
+import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Database.Beam
 import Database.Beam.Migrate
@@ -48,7 +49,7 @@ data PlayerT f
   { _playerId :: Columnar f (Auto Int)
   , _playerUsername :: Columnar f (Maybe Text)
   , _playerEmail :: Columnar f Text
-  , _playerOAuthID :: Columnar f Text
+  , _playerJwt :: Columnar f ByteString
   }
   deriving Generic
 
