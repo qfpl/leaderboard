@@ -19,6 +19,7 @@ library
   exposed-modules:     Leaderboard.API
                        Leaderboard.API.Player
                        Leaderboard.Application
+                       Leaderboard.Queries
                        Leaderboard.Schema
                        Leaderboard.Schema.V_0_0_1
                        Leaderboard.Server

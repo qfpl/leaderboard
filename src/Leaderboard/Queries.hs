@@ -1,24 +1,15 @@
 module Leaderboard.Queries
-  ( -- * Player
-    insertPlayer
-  )
+  (getOrCreateJwk)
 where
 
-import Control.Lens
-import Database.PostgreSQL.Simple
-import Opaleye
+import           Control.Lens
+import           Crypto.JOSE                (JWK)
+import           Database.PostgreSQL.Simple
 
-import Leaderboard.Models.Player
+import           Leaderboard.Schema         (Player)
 
-insertPlayer :: Connection -> Player -> IO Player
-insertPlayer conn p =
-  let
-    toInsert =
-      p
-        & playerId .~ PlayerId' Nothing
-        & playerFirstName %~ pgLazyText
-        & playerLastName._Just %~ pgLazyText
-        & playerEmail %~ pgLazyText
-        & playerRating %~ Nothing
-  in
-  runInsertManyReturning conn playerTable [toInsert] _
+getOrCreateJwk
+  :: Connection
+  -> IO JWK
+getOrCreateJwk conn =
+  undefined
