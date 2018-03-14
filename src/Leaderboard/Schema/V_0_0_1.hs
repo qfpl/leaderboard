@@ -49,7 +49,7 @@ data PlayerT f
   { _playerId :: Columnar f (Auto Int)
   , _playerUsername :: Columnar f (Maybe Text)
   , _playerEmail :: Columnar f Text
-  , _playerJwt :: Columnar f ByteString
+  , _playerIsAdmin :: Columnar f (Auto Bool)
   }
   deriving Generic
 
@@ -155,9 +155,9 @@ migration () =
   createTable "players"
     (Player
       (field "id" serial)
-      (field "firstName" (varchar Nothing) notNull)
-      (field "lastName" (varchar Nothing))
+      (field "name" (varchar Nothing) notNull)
       (field "email" (varchar Nothing) notNull)
+      (field "is_admin" boolean (defaultTo_ (val_ (Auto (Just False)))) notNull)
     ) <*>
   createTable "ladders"
     (Ladder
