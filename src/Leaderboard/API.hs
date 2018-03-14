@@ -1,21 +1,22 @@
-{-# language DataKinds #-}
-{-# language OverloadedStrings #-}
-{-# language TypeOperators #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
+
 module Leaderboard.API where
 
-import Data.Text (Text)
-import Servant
+import           Data.Text              (Text)
+import           Servant
 
-import Leaderboard.API.Player (playerAPI)
-import Leaderboard.Server
+import           Leaderboard.API.Player (PlayerAPI, playerAPI)
+import           Leaderboard.Server
 
-type LeaderboardAPI =
+type LeaderboardAPI auths =
   Get '[PlainText] Text :<|>
-  PlayerAPI
+  PlayerAPI auths
 
 leaderboardServer
   :: HasConnection env
-  => LServer env LeaderboardAPI
+  => LServer env (LeaderboardAPI auths)
 leaderboardServer =
   pure "test" :<|>
   playerAPI

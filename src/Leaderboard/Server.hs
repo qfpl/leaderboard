@@ -1,30 +1,40 @@
-{-# language DataKinds #-}
-{-# language FlexibleContexts #-}
-{-# language GeneralizedNewtypeDeriving #-}
-{-# language TemplateHaskell #-}
-{-# language TypeOperators #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeOperators              #-}
+
 module Leaderboard.Server where
 
-import Control.Lens
-import Control.Monad.Log
-import Control.Monad.Reader
-import Control.Monad.Except
-import Database.Beam
-import Database.Beam.Postgres
-import Servant
+import           Control.Lens
+import           Control.Monad.Except
+import           Control.Monad.Log
+import           Control.Monad.Reader
+import           Crypto.JOSE            (JWK)
+import           Database.Beam
+import           Database.Beam.Postgres
+import           Servant
 
 class HasConnection env where
   connection :: Lens' env Connection
 
+class HasJWK env where
+  jwk :: Lens' env JWK
+
 data Environment
   = Environment
   { _envConnection :: Connection
+  , _envJWK        :: JWK
   } deriving Eq
 
 makeLenses ''Environment
 
 instance HasConnection Environment where
   connection = envConnection
+
+instance HasJWK Environment where
+  jwk = envJWK
 
 newtype LHandler env a
   = LHandler
