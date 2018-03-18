@@ -4,6 +4,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeFamilies       #-}
+
 module Leaderboard.Schema.V_0_0_1 where
 
 import           Control.Lens                   (makeLenses)

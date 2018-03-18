@@ -42,7 +42,6 @@ instance FromJSON RegisterPlayer where
       v .: "password" <*>
       v .: "isAdmin"
 
-
 type PlayerAPI auths =
   Auth auths Player :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Player
 

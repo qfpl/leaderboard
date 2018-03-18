@@ -25,24 +25,20 @@ data ApplicationOptions
   , aoDbUser :: String
   , aoDbName :: String
   , aoPort :: Int
+  , aoUsers :: FilePath
   }
 
 applicationOptionsParser :: Parser ApplicationOptions
 applicationOptionsParser =
   ApplicationOptions <$>
-  strOption
-    (long "db_host" <>
-     help "Database host name" <>
-     metavar "HOST") <*>
-  fmap read
-    (strOption $
-     long "db_port" <>
-     help "Database port" <>
-     metavar "DB_PORT") <*>
-  strOption (long "db_user" <> help "Database user" <> metavar "USER") <*>
-  strOption (long "db_name" <> help "Database name" <> metavar "NAME") <*>
-  fmap read
-    (strOption $ long "port" <> help "Webapp port" <> metavar "PORT")
+    dbHost <*> dbPort <*> dbUser <*> dbName <*> port <*> users
+  where
+    dbHost = strOption (long "db_host" <> help "Database host name" <> metavar "HOST")
+    dbPort = fmap read (strOption $ long "db_port" <> help "Database port" <> metavar "DB_PORT")
+    dbUser = strOption (long "db_user" <> help "Database user" <> metavar "DB_USER")
+    dbName = strOption (long "db_name" <> help "Database name" <> metavar "DB_NAME")
+    port = fmap read (strOption $ long "port" <> help "Webapp port" <> metavar "PORT")
+    users = strOption (long "users" <> help "Passwords file" <> metavar "USERS")
 
 parserInfo :: ParserInfo ApplicationOptions
 parserInfo =
