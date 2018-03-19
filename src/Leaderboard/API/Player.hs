@@ -1,27 +1,36 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE TypeOperators         #-}
 
 module Leaderboard.API.Player where
 
 import           Control.Lens
 import           Control.Monad.Except
+import           Control.Monad.IO.Class                   (MonadIO, liftIO)
 import           Control.Monad.Log                        as Log
 import           Control.Monad.Reader
-import           Data.Aeson (withObject, (.:), FromJSON, parseJSON)
-import           Data.Semigroup ((<>))
+import           Control.Monad.Trans.Control              (MonadBaseControl)
+import           Data.Aeson                               (FromJSON, parseJSON,
+                                                           withObject, (.:))
+import           Data.Semigroup                           ((<>))
 import           Data.Text                                (Text)
 import           Database.Beam
 import           Database.Beam.Backend.SQL.BeamExtensions
 import           Network.HTTP.Client.TLS
 import           Servant                                  ((:>), JSON, Post,
-                                                           ReqBody, Server)
-import           Servant.Auth.Server                      (Auth, AuthResult)
+                                                           ReqBody, ServerT)
+import           Servant.Auth.Server                      (Auth, AuthResult (Authenticated))
 import           URI.ByteString.QQ
 
-import           Leaderboard.Schema                       (Player)
+import           Leaderboard.Env                          (HasDbConnPool,
+                                                           withConn)
+import           Leaderboard.Queries                      (selectPlayerCount)
+import           Leaderboard.Schema                       (Player,
+                                                           PlayerT (Player))
 import           Leaderboard.Server
 
 data RegisterPlayer
@@ -45,9 +54,17 @@ instance FromJSON RegisterPlayer where
 type PlayerAPI auths =
   Auth auths Player :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Player
 
-playerAPI
-  :: Monad m
-  => AuthResult Player
-  -> RegisterPlayer
-  -> m Player
-playerAPI = undefined
+playerServer
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadIO m
+     , MonadReader r m
+     )
+  => ServerT (PlayerAPI auths) m
+playerServer
+  (Authenticated Player{..})
+  LeaderboardRegistration{..} =
+  withConn $ \c -> do
+    numPlayers <- liftIO $ selectPlayerCount c
+    undefined
+

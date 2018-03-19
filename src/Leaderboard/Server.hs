@@ -1,75 +1,79 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeOperators              #-}
 
 module Leaderboard.Server where
 
 import           Control.Lens
-import           Control.Monad.Except
-import           Control.Monad.Log
-import           Control.Monad.Reader
-import           Crypto.JOSE            (JWK)
+import           Control.Monad.Base          (MonadBase)
+import           Control.Monad.Except        (MonadError (catchError, throwError))
+import           Control.Monad.Log           (LogT (LogT), Logger, MonadLog,
+                                              runLogT)
+import           Control.Monad.Reader        (MonadReader, ReaderT, runReaderT)
+import           Control.Monad.Trans         (MonadTrans (lift))
+import           Control.Monad.Trans.Control (MonadBaseControl)
+
+import           Crypto.JOSE                 (JWK)
 import           Database.Beam
 import           Database.Beam.Postgres
 import           Servant
 
-class HasConnection env where
-  connection :: Lens' env Connection
+import           Leaderboard.Env             (HasDbConnPool, withConn)
 
-class HasJWK env where
-  jwk :: Lens' env JWK
-
-data Environment
-  = Environment
-  { _envConnection :: Connection
-  , _envJWK        :: JWK
-  } deriving Eq
-
-makeLenses ''Environment
-
-instance HasConnection Environment where
-  connection = envConnection
-
-instance HasJWK Environment where
-  jwk = envJWK
-
-newtype LHandler env a
-  = LHandler
-  { runLHandler
-    :: ReaderT env (ExceptT ServantErr (LogT () IO)) a
+newtype LHandlerT env m a
+  = LHandlerT
+  { runLHandlerT
+    -- :: ReaderT env (ExceptT ServantErr (LogT () IO)) a
+    :: ReaderT env (LogT () m) a
   } deriving
   ( Functor
   , Applicative
   , Monad
   , MonadReader env
-  , MonadError ServantErr
   , MonadLog ()
   , MonadIO
   )
 
-type LServer env api = ServerT api (LHandler env)
+instance MonadTrans (LHandlerT env) where
+  lift = LHandler . lift . LogT . const
+
+instance MonadError ServantErr (LHandlerT env Handler) where
+  throwError = lift . throwError
+
+  -- catchError
+  --   :: LHandlerT env Handler a
+  --      -> (ServantErr -> LHandlerT env Handler a)
+  --      -> LHandlerT env Handler a
+  catchError ha te =
+    _ . runReaderT $ runLHandlerT ha
+
+instance Monad m => MonadBase IO (LHandlerT env m)
+
+-- instance MonadBaseControl IO (LHandlerT env m) where
+
+type LServer env api m = ServerT api (LHandlerT env m)
 
 liftQuery
   :: ( MonadBeam syntax be Connection m
      , MonadIO n
      , MonadReader env n
-     , HasConnection env
+     , HasDbConnPool env
+     , MonadBaseControl IO n
      )
   => (q -> m a)
   -> q
   -> n a
-liftQuery q m = do
-  conn <- view connection
-  liftIO $ withDatabase conn (q m)
+liftQuery q m =
+  withConn $ \conn ->
+    liftIO $ withDatabase conn (q m)
 
-toHandler :: env -> Logger () -> (LHandler env :~> Handler)
+toHandler :: env -> Logger () -> (LHandlerT env Handler :~> Handler)
 toHandler env l =
   NT $
-    Handler . ExceptT .
     flip runLogT l .
-    runExceptT .
     flip runReaderT env .
     runLHandler

@@ -11,9 +11,10 @@ import           Servant.Auth.Server (JWT, defaultCookieSettings,
                                       defaultJWTSettings)
 
 import           Leaderboard.API     (LeaderboardAPI, leaderboardServer)
-import           Leaderboard.Server  (Environment, _envJWK, toHandler)
+import           Leaderboard.Env     (Env, _envJWK)
+import           Leaderboard.Server  (toHandler)
 
-leaderboard :: Environment -> Logger () -> Application
+leaderboard :: Env -> Logger () -> Application
 leaderboard env logger =
   let
     jwtCfg = defaultJWTSettings (_envJWK env)

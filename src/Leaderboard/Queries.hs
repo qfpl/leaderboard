@@ -1,6 +1,7 @@
 module Leaderboard.Queries
-  (getOrCreateJwk)
-where
+  ( getOrCreateJwk
+  , selectPlayerCount
+  ) where
 
 import           Control.Lens
 import           Crypto.JOSE                (JWK)
@@ -12,4 +13,10 @@ getOrCreateJwk
   :: Connection
   -> IO JWK
 getOrCreateJwk conn =
+  undefined
+
+selectPlayerCount
+  :: Connection
+  -> IO Integer
+selectPlayerCount =
   undefined
