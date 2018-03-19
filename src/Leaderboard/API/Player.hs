@@ -68,3 +68,6 @@ playerServer
     numPlayers <- liftIO $ selectPlayerCount c
     undefined
 
+  -- case unAuto _playerIsAdmin of
+  --   Just True -> addPlayer rp
+  --   _         -> throwError . ServantError $ err403
