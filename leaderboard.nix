@@ -18,10 +18,7 @@ mkDerivation {
     resource-pool retry servant-auth servant-auth-server servant-server
     text transformers-base uri-bytestring warp
   ];
-  executableHaskellDepends = [
-    base bytestring monad-log optparse-applicative postgresql-simple
-    retry text uri-bytestring warp
-  ];
+  executableHaskellDepends = [ base ];
   testHaskellDepends = [ base hedgehog ];
   license = stdenv.lib.licenses.bsd3;
 }

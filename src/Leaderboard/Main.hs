@@ -1,12 +1,16 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Leaderboard.Main where
 
 import           Control.Exception
 import           Control.Monad.Log          (LogType (..), levelDebug,
                                              makeDefaultLogger,
                                              simpleTimeFormat)
-import           Control.Retry              (exponentialBackoff)
+import           Control.Retry              (constantDelay, defaultLogMsg,
+                                             logRetries, recovering)
 import           Data.Either
 import           Data.Monoid
+import Data.Pool ()
 import           Data.Word                  (Word16)
 import           Database.PostgreSQL.Simple
 import           Network.Wai.Handler.Warp
@@ -18,7 +22,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 
 import           Leaderboard.Application    (leaderboard)
-import           Leaderboard.Env            (Env)
+import           Leaderboard.Env            (Env, _envDbConnPool)
 import           Leaderboard.Queries        (getOrCreateJwk)
 
 data ApplicationOptions
@@ -56,20 +60,11 @@ main = do
     makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
 
   let
-    connInfo =
-      ConnectInfo
-      { connectHost = aoDbHost opts
-      , connectPort = aoDbPort opts
-      , connectUser = aoDbUser opts
-      , connectPassword = password
-      , connectDatabase = aoDbName opts
-      }
-
     mkEnv = do
       putStrLn "Connecting to database.."
       c <- connect connInfo
       jwk <- getOrCreateJwk c
-      pure $ Environment c jwk
+      pure $ Env c jwk
 
   bracket
     (recovering
@@ -82,4 +77,26 @@ main = do
     (\env -> do
         putStrLn "Connected to database."
         run (aoPort opts) $ leaderboard env logger)
-    (close . _envConnection)
+    (close . envConnection)
+
+mkConnectionPool
+  :: ApplicationOptions
+  -> String
+  -> IO (Pool Connection)
+mkConnectionPool ApplicationOptions{..} pass =
+  createPool
+    retryingConnect
+    close
+    numStripes
+    anHourInSeconds
+    maxOpenConnections
+  where
+    -- docs says one stripe is enough unless in a high perf environment
+    numStripes = 1
+    anHourInSeconds = 3600
+    maxOpenConnections = 20
+    info = ConnectInfo aoDbHost aoDbPort aoDbUser pass aoDbName
+    retryingConnect =
+      recoverAll
+        (exponentialBackoff 200)
+        (\_ -> putStrLn "Attempting to connect to database..." *> connect info)
