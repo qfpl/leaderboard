@@ -14,9 +14,9 @@ mkDerivation {
   libraryHaskellDepends = [
     aeson base beam-core beam-migrate beam-postgres bytestring
     http-client-tls jose lens monad-control monad-log mtl
-    postgresql-simple product-profunctors resource-pool servant-auth
-    servant-auth-server servant-server text transformers-base
-    uri-bytestring
+    optparse-applicative postgresql-simple product-profunctors
+    resource-pool retry servant-auth servant-auth-server servant-server
+    text transformers-base uri-bytestring warp
   ];
   executableHaskellDepends = [
     base bytestring monad-log optparse-applicative postgresql-simple
