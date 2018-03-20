@@ -2,22 +2,33 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
+
+-- MonadBaseControl demands this apparently :(
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Leaderboard.Server where
 
 import           Control.Lens
-import           Control.Monad.Base          (MonadBase)
+import           Control.Monad.Base          (MonadBase (liftBase))
 import           Control.Monad.Except        (MonadError (catchError, throwError))
 import           Control.Monad.Log           (LogT (LogT), Logger, MonadLog,
-                                              runLogT)
-import           Control.Monad.Reader        (MonadReader, ReaderT, runReaderT)
+                                              askLogger, runLogT)
+import           Control.Monad.Reader        (MonadReader, ReaderT (ReaderT), ask,
+                                              runReaderT)
 import           Control.Monad.Trans         (MonadTrans (lift))
-import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (StM, liftBaseWith, restoreM),
+                                              MonadTransControl (StT, liftWith, restoreT),
+                                              Run, defaultLiftBaseWith,
+                                              defaultRestoreM, defaultRestoreT, defaultLiftWith)
 
 import           Crypto.JOSE                 (JWK)
+import Data.Functor.Identity (Identity)
 import           Database.Beam
 import           Database.Beam.Postgres
 import           Servant
@@ -39,21 +50,32 @@ newtype LHandlerT env m a
   )
 
 instance MonadTrans (LHandlerT env) where
-  lift = LHandler . lift . LogT . const
+  lift = LHandlerT . lift . lift
 
 instance MonadError ServantErr (LHandlerT env Handler) where
   throwError = lift . throwError
 
-  -- catchError
-  --   :: LHandlerT env Handler a
-  --      -> (ServantErr -> LHandlerT env Handler a)
-  --      -> LHandlerT env Handler a
-  catchError ha te =
-    _ . runReaderT $ runLHandlerT ha
+  catchError lha te = do
+    env <- ask
+    logger <- askLogger
+    ha <- liftIO . runHandler . ($$ lha) $ toHandler env logger
+    either te (const lha) ha
 
-instance Monad m => MonadBase IO (LHandlerT env m)
+instance MonadIO m => MonadBase IO (LHandlerT env m) where
+  liftBase = liftIO
 
--- instance MonadBaseControl IO (LHandlerT env m) where
+instance (MonadIO m, MonadBaseControl IO m) => MonadBaseControl IO (LHandlerT env m) where
+  type StM (LHandlerT env m) a = ComposeSt (LHandlerT env) (ReaderT env m) a
+  liftBaseWith     = defaultLiftBaseWith
+  restoreM         = defaultRestoreM
+
+-- Run (LHandlerT env) = LHandlerT env n b -> n (StT (LHandlerT env) b)
+
+instance MonadTransControl (LHandlerT env) where
+  type StT (LHandlerT env) a = StT (ReaderT env) a
+  liftWith f =
+      LHandlerT $ ReaderT (\re -> LogT (\le -> f (toHandler re le $$)))
+  restoreT = lift
 
 type LServer env api m = ServerT api (LHandlerT env m)
 
@@ -71,9 +93,9 @@ liftQuery q m =
   withConn $ \conn ->
     liftIO $ withDatabase conn (q m)
 
-toHandler :: env -> Logger () -> (LHandlerT env Handler :~> Handler)
+toHandler :: env -> Logger () -> (LHandlerT env m :~> m)
 toHandler env l =
   NT $
     flip runLogT l .
     flip runReaderT env .
-    runLHandler
+    runLHandlerT
