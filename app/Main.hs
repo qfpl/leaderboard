@@ -1,4 +1,4 @@
-import Leaderboard.Main (main)
+import qualified Leaderboard.Main as L
 
 main :: IO ()
-main = main
+main = L.main

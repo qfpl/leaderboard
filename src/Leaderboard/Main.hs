@@ -7,10 +7,10 @@ import           Control.Monad.Log          (LogType (..), levelDebug,
                                              makeDefaultLogger,
                                              simpleTimeFormat)
 import           Control.Retry              (constantDelay, defaultLogMsg,
-                                             logRetries, recovering)
+                                             logRetries, recovering, recoverAll, exponentialBackoff, limitRetries)
 import           Data.Either
 import           Data.Monoid
-import Data.Pool ()
+import           Data.Pool                  (Pool, createPool, withResource)
 import           Data.Word                  (Word16)
 import           Database.PostgreSQL.Simple
 import           Network.Wai.Handler.Warp
@@ -22,7 +22,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 
 import           Leaderboard.Application    (leaderboard)
-import           Leaderboard.Env            (Env, _envDbConnPool)
+import           Leaderboard.Env            (Env (Env))
 import           Leaderboard.Queries        (getOrCreateJwk)
 
 data ApplicationOptions
@@ -54,30 +54,13 @@ parserInfo =
 main :: IO ()
 main = do
   putStrLn "leaderboard started"
-  opts <- execParser parserInfo
-  password <- getEnv "DB_PASS"
+  ao@ApplicationOptions{..} <- execParser parserInfo
+  password <- getEnv "DBPASS"
   logger <-
     makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
-
-  let
-    mkEnv = do
-      putStrLn "Connecting to database.."
-      c <- connect connInfo
-      jwk <- getOrCreateJwk c
-      pure $ Env c jwk
-
-  bracket
-    (recovering
-      (constantDelay 1000)
-      [ logRetries
-          (\SomeException{} -> pure True)
-          (\b e r -> putStrLn $ defaultLogMsg b e r)
-      ]
-      (const mkEnv))
-    (\env -> do
-        putStrLn "Connected to database."
-        run (aoPort opts) $ leaderboard env logger)
-    (close . envConnection)
+  pool <- mkConnectionPool ao password
+  jwk <- withResource pool getOrCreateJwk
+  run aoPort $ leaderboard (Env pool jwk) logger
 
 mkConnectionPool
   :: ApplicationOptions
@@ -98,5 +81,5 @@ mkConnectionPool ApplicationOptions{..} pass =
     info = ConnectInfo aoDbHost aoDbPort aoDbUser pass aoDbName
     retryingConnect =
       recoverAll
-        (exponentialBackoff 200)
+        (exponentialBackoff 200 <> limitRetries 10)
         (\_ -> putStrLn "Attempting to connect to database..." *> connect info)
