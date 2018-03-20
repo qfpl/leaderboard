@@ -20,6 +20,7 @@ library
                        Leaderboard.API.Player
                        Leaderboard.Application
                        Leaderboard.Env
+                       Leaderboard.Main
                        Leaderboard.Queries
                        Leaderboard.Schema
                        Leaderboard.Schema.V_0_0_1

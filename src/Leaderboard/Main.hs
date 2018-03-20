@@ -1,3 +1,5 @@
+module Leaderboard.Main where
+
 import           Control.Exception
 import           Control.Monad.Log          (LogType (..), levelDebug,
                                              makeDefaultLogger,
