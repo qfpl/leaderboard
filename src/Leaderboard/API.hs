@@ -1,23 +1,33 @@
-{-# language DataKinds #-}
-{-# language OverloadedStrings #-}
-{-# language TypeOperators #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TypeOperators         #-}
+
 module Leaderboard.API where
 
-import Data.Text (Text)
-import Servant
+import           Control.Monad.IO.Class      (MonadIO)
+import           Control.Monad.Reader        (MonadReader)
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Data.Text                   (Text)
+import           Servant                     ((:<|>)((:<|>)), Get, PlainText, ServerT)
+import Servant.Auth.Server (AuthResult)
 
-import Leaderboard.API.Player
-import Leaderboard.Server
+import           Leaderboard.API.Player      (PlayerAPI, playerServer)
+import           Leaderboard.Env             (HasDbConnPool)
+import           Leaderboard.Server
 
-type LeaderboardAPI =
+type LeaderboardAPI auths =
   Get '[PlainText] Text :<|>
-  PlayerAPI
+  PlayerAPI auths
 
 leaderboardServer
-  :: ( HasOAuth2 env
-     , HasConnection env
+  :: ( HasDbConnPool env
+     , MonadBaseControl IO m
+     , MonadReader env m
+     , MonadIO m
      )
-  => LServer env LeaderboardAPI
+  => ServerT (LeaderboardAPI auths) m
 leaderboardServer =
   pure "test" :<|>
-  playerAPI
+  playerServer

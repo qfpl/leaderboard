@@ -1,27 +1,30 @@
-{-# language DeriveGeneric #-}
-{-# language FlexibleInstances #-}
-{-# language OverloadedStrings #-}
-{-# language StandaloneDeriving #-}
-{-# language TemplateHaskell #-}
-{-# language TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE TypeFamilies       #-}
+
 module Leaderboard.Schema.V_0_0_1 where
 
-import Control.Lens (makeLenses)
-import Data.Aeson
-import Data.Text (Text)
-import Database.Beam
-import Database.Beam.Migrate
-import Database.Beam.Postgres
-import Database.Beam.Postgres.Migrate
+import           Control.Lens                   (makeLenses)
+import           Data.Aeson
+import           Data.ByteString                (ByteString)
+import           Data.Text                      (Text)
+import           Database.Beam
+import           Database.Beam.Migrate
+import           Database.Beam.Postgres
+import           Database.Beam.Postgres.Migrate
+import           Servant.Auth.Server            (FromJWT, ToJWT)
 
 data RatingT f
   = Rating
-  { _ratingId :: Columnar f (Auto Int)
-  , _ratingRating :: Columnar f Double
-  , _ratingDev :: Columnar f Double
-  , _ratingVol :: Columnar f Double
+  { _ratingId         :: Columnar f (Auto Int)
+  , _ratingRating     :: Columnar f Double
+  , _ratingDev        :: Columnar f Double
+  , _ratingVol        :: Columnar f Double
   , _ratingInactivity :: Columnar f Int
-  , _ratingAge :: Columnar f Int
+  , _ratingAge        :: Columnar f Int
   }
   deriving Generic
 
@@ -45,10 +48,10 @@ instance Beamable (PrimaryKey RatingT)
 
 data PlayerT f
   = Player
-  { _playerId :: Columnar f (Auto Int)
-  , _playerUsername :: Columnar f (Maybe Text)
-  , _playerEmail :: Columnar f Text
-  , _playerOAuthID :: Columnar f Text
+  { _playerId       :: C f (Auto Int)
+  , _playerUsername :: C f (Maybe Text)
+  , _playerEmail    :: C f Text
+  , _playerIsAdmin  :: C f (Auto Bool)
   }
   deriving Generic
 
@@ -56,13 +59,25 @@ type Player = PlayerT Identity
 type PlayerId = PrimaryKey PlayerT Identity
 
 instance ToJSON Player where
-  toJSON (Player (Auto a) b c _) =
+  toJSON (Player (Auto a) b c d) =
     object
       [ "id" .= a
       , "username" .= b
       , "email" .= c
+      , "isAdmin" .= d
       ]
 
+instance FromJSON Player where
+  parseJSON =
+    withObject "Player" $ \v ->
+      Player <$>
+      v .: "id" <*>
+      v .: "username" <*>
+      v .: "email" <*>
+      v .: "isAdmin"
+
+instance ToJWT Player
+instance FromJWT Player
 deriving instance Eq Player
 deriving instance Show Player
 deriving instance Ord Player
@@ -81,8 +96,8 @@ instance Beamable (PrimaryKey PlayerT)
 
 data LadderT f
   = Ladder
-  { _ladderId :: Columnar f (Auto Int)
-  , _ladderName :: Columnar f Text
+  { _ladderId    :: Columnar f (Auto Int)
+  , _ladderName  :: Columnar f Text
   , _ladderOwner :: PrimaryKey PlayerT f
   }
   deriving Generic
@@ -131,9 +146,9 @@ instance Beamable (PrimaryKey PlayerToLadderT)
 
 data LeaderboardDb f
   = LeaderboardDb
-  { _leaderboardRatings :: f (TableEntity RatingT)
-  , _leaderboardPlayers :: f (TableEntity PlayerT)
-  , _leaderboardLadders :: f (TableEntity LadderT)
+  { _leaderboardRatings        :: f (TableEntity RatingT)
+  , _leaderboardPlayers        :: f (TableEntity PlayerT)
+  , _leaderboardLadders        :: f (TableEntity LadderT)
   , _leaderboardPlayerToLadder :: f (TableEntity PlayerToLadderT)
   }
   deriving Generic
@@ -154,9 +169,9 @@ migration () =
   createTable "players"
     (Player
       (field "id" serial)
-      (field "firstName" (varchar Nothing) notNull)
-      (field "lastName" (varchar Nothing))
+      (field "name" (varchar Nothing) notNull)
       (field "email" (varchar Nothing) notNull)
+      (field "is_admin" boolean (defaultTo_ (val_ (Auto (Just False)))) notNull)
     ) <*>
   createTable "ladders"
     (Ladder
