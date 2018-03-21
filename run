@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+cabal new-build
 exe=$(find dist-newstyle -type f -executable -name leaderboard)
 
 "$exe" --db_host=localhost --db_port=5432 --db_user=postgres --db_name=leaderboard --port=7645
