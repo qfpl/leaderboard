@@ -13,5 +13,6 @@ fi
 echo ""
 echo "RUNNING"
 echo "-------"
+# Make sure we're running the intended version -- nix defaults to 802 on my setup
 exe=$(find dist-newstyle -type f -executable -wholename "*ghc-8.0.2*leaderboard")
 DBPASS=password "$exe" --db_host=localhost --db_port=5432 --db_user=postgres --db_name=leaderboard --port=7645 $@
