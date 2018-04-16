@@ -8,6 +8,7 @@
 module Leaderboard.Schema.V_0_0_1 where
 
 import           Control.Lens                   (makeLenses)
+import           Crypto.JOSE                    (JWK)
 import           Data.Aeson
 import           Data.ByteString                (ByteString)
 import           Data.Text                      (Text)
@@ -144,12 +145,34 @@ instance Table PlayerToLadderT where
 
 instance Beamable (PrimaryKey PlayerToLadderT)
 
+
+data JwkT f
+  = Jwk
+  { _jwkJwk :: C f Text }
+  deriving Generic
+
+deriving instance Eq Jwk
+deriving instance Show Jwk
+deriving instance Ord Jwk
+
+type Jwk = JwkT Identity
+type JwkId = PrimaryKey JwkT Identity
+
+instance Beamable JwkT
+instance Table JwkT where
+  data PrimaryKey JwkT f = JwkId (C f Text) deriving Generic
+  primaryKey = JwkId . _jwkJwk
+
+instance Beamable (PrimaryKey JwkT)
+
+
 data LeaderboardDb f
   = LeaderboardDb
   { _leaderboardRatings        :: f (TableEntity RatingT)
   , _leaderboardPlayers        :: f (TableEntity PlayerT)
   , _leaderboardLadders        :: f (TableEntity LadderT)
   , _leaderboardPlayerToLadder :: f (TableEntity PlayerToLadderT)
+  , _leaderboardJwk            :: f (TableEntity JwkT)
   }
   deriving Generic
 
@@ -183,7 +206,12 @@ migration () =
     (PlayerToLadder
       (PlayerId $ field "player" int notNull)
       (LadderId $ field "ladder" int notNull)
-      (RatingId $ field "rating" int notNull))
+      (RatingId $ field "rating" int notNull)
+    ) <*>
+  createTable "jwk"
+    (Jwk
+      (field "jwk" (varchar Nothing) notNull)
+    )
 
 makeLenses ''LeaderboardDb
 makeLenses ''PlayerT

@@ -31,4 +31,5 @@ instance FromJSON RegisterPlayer where
 data LeaderboardError =
     ServantError ServantErr
   | PostgresError SqlError
+  | MultipleJwksInDb
   deriving (Eq, Show)
