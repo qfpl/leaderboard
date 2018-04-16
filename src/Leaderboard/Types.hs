@@ -1,12 +1,14 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Leaderboard.Types where
 
-import           Data.Aeson   (FromJSON, parseJSON, withObject, (.:))
-import           Data.Text    (Text)
-import           GHC.Generics (Generic)
-import           Servant      (ServantErr)
+import           Data.Aeson                 (FromJSON, parseJSON, withObject,
+                                             (.:))
+import           Data.Text                  (Text)
+import           Database.PostgreSQL.Simple (SqlError)
+import           GHC.Generics               (Generic)
+import           Servant                    (ServantErr)
 
 data RegisterPlayer
   = LeaderboardRegistration
@@ -28,5 +30,5 @@ instance FromJSON RegisterPlayer where
 
 data LeaderboardError =
     ServantError ServantErr
-  | DatabaseError
+  | PostgresError SqlError
   deriving (Eq, Show)

@@ -25,6 +25,7 @@ library
                        Leaderboard.Schema
                        Leaderboard.Schema.V_0_0_1
                        Leaderboard.Server
+                       Leaderboard.Types
   -- other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.11

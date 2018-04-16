@@ -7,7 +7,8 @@ import           Control.Monad.Log          (LogType (..), levelDebug,
                                              makeDefaultLogger,
                                              simpleTimeFormat)
 import           Control.Retry              (constantDelay, defaultLogMsg,
-                                             logRetries, recovering, recoverAll, exponentialBackoff, limitRetries)
+                                             exponentialBackoff, limitRetries,
+                                             logRetries, recoverAll, recovering)
 import           Data.Either
 import           Data.Monoid
 import           Data.Pool                  (Pool, createPool, withResource)
@@ -24,26 +25,33 @@ import qualified Data.Text                  as T
 import           Leaderboard.Application    (leaderboard)
 import           Leaderboard.Env            (Env (Env))
 import           Leaderboard.Queries        (getOrCreateJwk)
+import           Leaderboard.Schema         (createSchema)
 
 data ApplicationOptions
   = ApplicationOptions
-  { aoDbHost :: String
-  , aoDbPort :: Word16
-  , aoDbUser :: String
-  , aoDbName :: String
-  , aoPort   :: Int
+  { aoDbHost  :: String
+  , aoDbPort  :: Word16
+  , aoDbUser  :: String
+  , aoDbName  :: String
+  , aoPort    :: Int
+  , aoCommand :: Command
   }
+
+data Command
+  = RunApp
+  | MigrateDb
 
 applicationOptionsParser :: Parser ApplicationOptions
 applicationOptionsParser =
   ApplicationOptions <$>
-    dbHost <*> dbPort <*> dbUser <*> dbName <*> port
+    dbHost <*> dbPort <*> dbUser <*> dbName <*> port <*> migrateDb
   where
     dbHost = strOption (long "db_host" <> help "Database host name" <> metavar "HOST")
     dbPort = fmap read (strOption $ long "db_port" <> help "Database port" <> metavar "DB_PORT")
     dbUser = strOption (long "db_user" <> help "Database user" <> metavar "DB_USER")
     dbName = strOption (long "db_name" <> help "Database name" <> metavar "DB_NAME")
     port = fmap read (strOption $ long "port" <> help "Webapp port" <> metavar "PORT")
+    migrateDb = flag RunApp MigrateDb (long "migrate" <> help "Migrate/initialise the database")
 
 parserInfo :: ParserInfo ApplicationOptions
 parserInfo =
@@ -56,11 +64,22 @@ main = do
   putStrLn "leaderboard started"
   ao@ApplicationOptions{..} <- execParser parserInfo
   password <- getEnv "DBPASS"
+  pool <- mkConnectionPool ao password
+  case aoCommand of
+    MigrateDb ->
+      withResource pool createSchema >>=
+        either print (const $ putStrLn "Migrated successfully")
+    RunApp    -> runApp pool aoPort
+
+runApp
+  :: Pool Connection
+  -> Int
+  -> IO ()
+runApp pool port = do
   logger <-
     makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
-  pool <- mkConnectionPool ao password
   jwk <- withResource pool getOrCreateJwk
-  run aoPort $ leaderboard (Env pool jwk) logger
+  run port $ leaderboard (Env pool jwk) logger
 
 mkConnectionPool
   :: ApplicationOptions

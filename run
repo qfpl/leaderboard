@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
-exe=$(find dist-newstyle -type f -executable -name leaderboard)
+echo "BUILDING"
+echo "--------"
+cabal new-build
 
-"$exe" --db_host=localhost --db_port=5432 --db_user=postgres --db_name=leaderboard --port=7645
+rc=$?
+if (( rc != 0 )); then
+    echo "Failed to build"
+    exit $rc
+fi
+
+echo ""
+echo "RUNNING"
+echo "-------"
+exe=$(find dist-newstyle -type f -executable -wholename "*ghc-8.0.2*leaderboard")
+DBPASS=password "$exe" --db_host=localhost --db_port=5432 --db_user=postgres --db_name=leaderboard --port=7645 $@
