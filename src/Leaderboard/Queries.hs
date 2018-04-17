@@ -7,12 +7,16 @@ module Leaderboard.Queries
 import           Control.Lens
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (eitherDecode')
-import           Data.Text.Lazy             (fromStrict)
-import           Data.Text.Lazy.Encoding    (encodeUtf8)
+import           Data.Aeson.Text            (encodeToLazyText)
+import           Data.Functor               (($>))
+import           Data.Text.Lazy             (fromStrict, toStrict)
+import           Data.Text.Lazy.Encoding    (decodeUtf8, encodeUtf8)
 import qualified Database.Beam              as B
+import           Database.PgErrors          (pgExceptionToError)
 import           Database.PostgreSQL.Simple (Connection)
 
-import           Leaderboard.Schema         (Player, leaderboardDb, _jwkJwk,
+import           Leaderboard.Schema         (Jwk, JwkT (Jwk), Player,
+                                             leaderboardDb, _jwkJwk,
                                              _leaderboardJwk)
 import           Leaderboard.Types          (LeaderboardError (JwkDecodeError, MultipleJwksInDb),
                                              RegisterPlayer)
@@ -28,7 +32,7 @@ selectOrPersistJwk conn newJwk = do
   jwks <- selectJwks conn
   case jwks of
     Left s      -> pure . Left $ JwkDecodeError
-    Right []    -> insertJwk conn newJwk
+    Right []    -> newJwk >>= \jwk -> (jwk <$) <$> insertJwk conn newJwk
     Right [jwk] -> pure $ Right jwk
     Right jwks  -> pure . Left . MultipleJwksInDb $ jwks
 
@@ -46,9 +50,15 @@ selectJwks conn = do
 insertJwk
   :: Connection
   -> IO JWK
-  -> IO (Either LeaderboardError JWK)
-insertJwk =
-  undefined
+  -> IO (Either LeaderboardError ())
+insertJwk conn jwk = do
+  jwk' <- jwk
+  let dbJwk = Jwk . toStrict . encodeToLazyText $ jwk'
+  pgExceptionToError .
+    withDb conn .
+    B.runInsert .
+    B.insert (_leaderboardJwk leaderboardDb) $
+    B.insertValues [dbJwk]
 
 selectPlayerCount
   :: Connection

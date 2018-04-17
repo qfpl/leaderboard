@@ -18,6 +18,7 @@ import           Database.Beam.Migrate       (CheckedDatabaseSettings,
 import           Database.Beam.Migrate.Types (executeMigration)
 import           Database.Beam.Postgres
 
+import           Database.PgErrors           (pgExceptionToError)
 import qualified Leaderboard.Schema.V_0_0_1  as V_0_0_1 (migration)
 
 import           Leaderboard.Schema.V_0_0_1  hiding (migration)
@@ -36,8 +37,6 @@ createSchema
 createSchema conn =
   let
     exeMigration = executeMigration runNoReturn (V_0_0_1.migration ())
-    runIt = fmap Right . void $ withDatabaseDebug putStrLn conn exeMigration
-    handleError = pure . Left . PostgresError
   in
-    catch runIt handleError
+    pgExceptionToError . void $ withDatabaseDebug putStrLn conn exeMigration
 

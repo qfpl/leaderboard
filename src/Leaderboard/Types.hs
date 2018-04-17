@@ -7,7 +7,7 @@ import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, parseJSON, withObject,
                                              (.:))
 import           Data.Text                  (Text)
-import           Database.PostgreSQL.Simple (SqlError)
+import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
 
@@ -31,7 +31,12 @@ instance FromJSON RegisterPlayer where
 
 data LeaderboardError =
     ServantError ServantErr
-  | PostgresError SqlError
+  | PostgresError PostgresException
   | MultipleJwksInDb [JWK]
   | JwkDecodeError
+  deriving (Eq, Show)
+
+data PostgresException =
+    PgSqlError Pg.SqlError
+  | PgFormatError Pg.FormatError
   deriving (Eq, Show)

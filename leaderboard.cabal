@@ -16,7 +16,8 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Leaderboard.API
+  exposed-modules:     Database.PgErrors
+                       Leaderboard.API
                        Leaderboard.API.Player
                        Leaderboard.Application
                        Leaderboard.Env
@@ -26,7 +27,7 @@ library
                        Leaderboard.Schema.V_0_0_1
                        Leaderboard.Server
                        Leaderboard.Types
-  -- other-modules:       
+  other-modules:       
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.11
                      , aeson >=1.1.2.0 && <1.2
