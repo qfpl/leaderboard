@@ -3,6 +3,7 @@
 
 module Leaderboard.Types where
 
+import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, parseJSON, withObject,
                                              (.:))
 import           Data.Text                  (Text)
@@ -31,5 +32,6 @@ instance FromJSON RegisterPlayer where
 data LeaderboardError =
     ServantError ServantErr
   | PostgresError SqlError
-  | MultipleJwksInDb
+  | MultipleJwksInDb [JWK]
+  | JwkDecodeError
   deriving (Eq, Show)

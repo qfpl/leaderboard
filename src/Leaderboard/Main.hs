@@ -9,22 +9,22 @@ import           Control.Monad.Log          (LogType (..), levelDebug,
 import           Control.Retry              (constantDelay, defaultLogMsg,
                                              exponentialBackoff, limitRetries,
                                              logRetries, recoverAll, recovering)
+import qualified Data.ByteString.Char8      as C8
 import           Data.Either
 import           Data.Monoid
 import           Data.Pool                  (Pool, createPool, withResource)
+import qualified Data.Text                  as T
 import           Data.Word                  (Word16)
 import           Database.PostgreSQL.Simple
 import           Network.Wai.Handler.Warp
 import           Options.Applicative
 import           System.Environment
+import           System.Exit                (ExitCode (ExitFailure), exitWith)
 import           URI.ByteString
 
-import qualified Data.ByteString.Char8      as C8
-import qualified Data.Text                  as T
-
 import           Leaderboard.Application    (leaderboard)
-import           Leaderboard.Env            (Env (Env))
-import           Leaderboard.Queries        (getOrCreateJwk)
+import           Leaderboard.Env            (Env (Env), genJwk)
+import           Leaderboard.Queries        (selectOrPersistJwk)
 import           Leaderboard.Schema         (createSchema)
 
 data ApplicationOptions
@@ -78,8 +78,13 @@ runApp
 runApp pool port = do
   logger <-
     makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
-  jwk <- withResource pool getOrCreateJwk
-  run port $ leaderboard (Env pool jwk) logger
+  jwk <- withResource pool (`selectOrPersistJwk` genJwk)
+  let
+    doIt jwk' = run port $ leaderboard (Env pool jwk') logger
+    exitFail e = do
+      putStrLn $ "Error with JWK: " <> show e
+      exitWith . ExitFailure $ 1
+  either exitFail doIt jwk
 
 mkConnectionPool
   :: ApplicationOptions

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Leaderboard.Schema
   ( module Leaderboard.Schema.V_0_0_1
   , migration
