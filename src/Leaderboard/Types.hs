@@ -16,7 +16,7 @@ data RegisterPlayer
     { _lbrEmail    :: Text
     , _lbrName     :: Text
     , _lbrPassword :: Text
-    , _lbrIsAdmin  :: Text
+    , _lbrIsAdmin  :: Maybe Bool
     }
   deriving Generic
 

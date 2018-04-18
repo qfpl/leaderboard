@@ -22,6 +22,8 @@ leaderboard env logger =
     jwtCfg = defaultJWTSettings (_envJWK env)
     cfg = defaultCookieSettings :. jwtCfg :. EmptyContext
     api = Proxy :: Proxy (LeaderboardAPI '[JWT])
-    toHandler' = toHandler env logger :: LHandlerT Env Handler :~> Handler
+    toHandler' :: LHandlerT Env Handler :~> Handler
+    toHandler' = toHandler env logger
+    server = leaderboardServer defaultCookieSettings jwtCfg
   in
-    serveWithContext api cfg $ enter toHandler' leaderboardServer
+    serveWithContext api cfg $ enter toHandler' server

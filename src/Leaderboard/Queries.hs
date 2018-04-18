@@ -71,6 +71,6 @@ selectPlayerCount =
 
 addPlayer
   :: RegisterPlayer
-  -> m Player
+  -> IO Player
 addPlayer =
   undefined

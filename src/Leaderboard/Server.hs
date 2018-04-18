@@ -5,7 +5,6 @@
 {-# LANGUAGE InstanceSigs               #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 
@@ -19,21 +18,23 @@ import           Control.Monad.Base          (MonadBase (liftBase))
 import           Control.Monad.Except        (MonadError (catchError, throwError))
 import           Control.Monad.Log           (LogT (LogT), Logger, MonadLog,
                                               askLogger, runLogT)
-import           Control.Monad.Reader        (MonadReader, ReaderT (ReaderT), ask,
-                                              runReaderT)
+import           Control.Monad.Reader        (MonadReader, ReaderT (ReaderT),
+                                              ask, runReaderT)
 import           Control.Monad.Trans         (MonadTrans (lift))
 import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (StM, liftBaseWith, restoreM),
                                               MonadTransControl (StT, liftWith, restoreT),
                                               Run, defaultLiftBaseWith,
-                                              defaultRestoreM, defaultRestoreT, defaultLiftWith)
+                                              defaultLiftWith, defaultRestoreM,
+                                              defaultRestoreT)
 
 import           Crypto.JOSE                 (JWK)
-import Data.Functor.Identity (Identity)
+import           Data.Functor.Identity       (Identity)
 import           Database.Beam
 import           Database.Beam.Postgres
-import           Servant
+import           Servant                     ((:~>) (NT), Handler, ServantErr,
+                                              runHandler, ($$))
 
-import           Leaderboard.Env             (HasDbConnPool, withConn)
+import           Leaderboard.Env             (Env, HasDbConnPool, withConn)
 
 newtype LHandlerT env m a
   = LHandlerT
@@ -48,6 +49,8 @@ newtype LHandlerT env m a
   , MonadLog ()
   , MonadIO
   )
+
+type LHandler api = LHandlerT Env Handler api
 
 instance MonadTrans (LHandlerT env) where
   lift = LHandlerT . lift . lift
@@ -76,8 +79,6 @@ instance MonadTransControl (LHandlerT env) where
   liftWith f =
       LHandlerT $ ReaderT (\re -> LogT (\le -> f (toHandler re le $$)))
   restoreT = lift
-
-type LServer env api m = ServerT api (LHandlerT env m)
 
 liftQuery
   :: ( MonadBeam syntax be Connection m
