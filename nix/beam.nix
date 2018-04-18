@@ -4,7 +4,7 @@ nixpkgs.callPackage
   nixpkgs.stdenv.mkDerivation {
       name = "beam";
       src = fetchFromGitHub {
-        owner = "lightandlight";
+        owner = "tathougies";
         repo = "beam";
         rev = "0b68b591068d33fd1a2fee6a4871eb6ab4117496";
         sha256 = "0pz20i710j3imbrxfiksy724d63277qd0nhqik9r4gxngm9as4d2";
