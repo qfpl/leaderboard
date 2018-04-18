@@ -4,11 +4,11 @@
 }:
 mkDerivation {
   pname = "monad-log";
-  version = "0.2.0.0";
+  version = "0.1.2.0";
   src = fetchgit {
-    url = "https://github.com/LightAndLight/monad-log.git";
-    sha256 = "0czh7p7gz0gd51gggsqgxk1q5mcwypf1vr3053im90d5i0b5sc4v";
-    rev = "cf394588a81347f0c4f71186e86d7c4bac610b0b";
+    url = "https://github.com/ajmccluskey/monad-log.git";
+    sha256 = "1zc7vdkhjqvgpjk5nh3qybrzz0v50a11p6g8sksji6vlvkqbx6zd";
+    rev = "c740bf06e85031fcb0d89e393c86f449d8204cfb";
   };
   libraryHaskellDepends = [
     aeson base bytestring exceptions fast-logger lifted-base

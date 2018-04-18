@@ -15,9 +15,8 @@ import qualified Database.Beam              as B
 import           Database.PgErrors          (pgExceptionToError)
 import           Database.PostgreSQL.Simple (Connection)
 
-import           Leaderboard.Schema         (Jwk, JwkT (Jwk), Player,
-                                             leaderboardDb, _jwkJwk,
-                                             _leaderboardJwk)
+import           Leaderboard.Schema         (Jwk, JwkT (..), Player,
+                                             leaderboardDb, _leaderboardJwk)
 import           Leaderboard.Types          (LeaderboardError (JwkDecodeError, MultipleJwksInDb),
                                              RegisterPlayer)
 
@@ -53,7 +52,11 @@ insertJwk
   -> IO (Either LeaderboardError ())
 insertJwk conn jwk = do
   jwk' <- jwk
-  let dbJwk = Jwk . toStrict . encodeToLazyText $ jwk'
+  let
+    dbJwk =
+      Jwk { _jwkId = B.Auto Nothing
+          , _jwkJwk = toStrict . encodeToLazyText $ jwk'
+          }
   pgExceptionToError .
     withDb conn .
     B.runInsert .

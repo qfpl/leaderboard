@@ -148,7 +148,9 @@ instance Beamable (PrimaryKey PlayerToLadderT)
 
 data JwkT f
   = Jwk
-  { _jwkJwk :: C f Text }
+  { _jwkId  :: C f (Auto Int)
+  , _jwkJwk :: C f Text
+  }
   deriving Generic
 
 deriving instance Eq Jwk
@@ -160,8 +162,8 @@ type JwkId = PrimaryKey JwkT Identity
 
 instance Beamable JwkT
 instance Table JwkT where
-  data PrimaryKey JwkT f = JwkId (C f Text) deriving Generic
-  primaryKey = JwkId . _jwkJwk
+  data PrimaryKey JwkT f = JwkId (C f (Auto Int)) deriving Generic
+  primaryKey = JwkId . _jwkId
 
 instance Beamable (PrimaryKey JwkT)
 
@@ -210,6 +212,7 @@ migration () =
     ) <*>
   createTable "jwk"
     (Jwk
+      (field "id" serial)
       (field "jwk" (varchar Nothing) notNull)
     )
 
