@@ -1,3 +1,6 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications  #-}
+
 module Leaderboard.Queries
   ( selectOrPersistJwk
   , selectPlayerCount
@@ -9,6 +12,7 @@ import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (eitherDecode')
 import           Data.Aeson.Text            (encodeToLazyText)
 import           Data.Functor               (($>))
+import           Data.Text                  (Text)
 import           Data.Text.Lazy             (fromStrict, toStrict)
 import           Data.Text.Lazy.Encoding    (decodeUtf8, encodeUtf8)
 import qualified Database.Beam              as B
@@ -52,16 +56,11 @@ insertJwk
   -> IO (Either LeaderboardError ())
 insertJwk conn jwk = do
   jwk' <- jwk
-  let
-    dbJwk =
-      Jwk { _jwkId = B.Auto Nothing
-          , _jwkJwk = toStrict . encodeToLazyText $ jwk'
-          }
   pgExceptionToError .
     withDb conn .
     B.runInsert .
     B.insert (_leaderboardJwk leaderboardDb) $
-    B.insertValues [dbJwk]
+    B.insertExpressions [Jwk B.default_ (B.val_ . toStrict . encodeToLazyText $ jwk')]
 
 selectPlayerCount
   :: Connection

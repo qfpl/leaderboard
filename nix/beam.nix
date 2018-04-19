@@ -1,32 +1,29 @@
 { nixpkgs ? import <nixpkgs> {} }:
 nixpkgs.callPackage
-  ({ fetchFromGitHub }: 
+  ({ fetchFromGitHub }:
   nixpkgs.stdenv.mkDerivation {
       name = "beam";
       src = fetchFromGitHub {
         owner = "tathougies";
         repo = "beam";
-        rev = "0b68b591068d33fd1a2fee6a4871eb6ab4117496";
-        sha256 = "0pz20i710j3imbrxfiksy724d63277qd0nhqik9r4gxngm9as4d2";
+        rev = "ba7c05a743d1924588a436d34c741a949adb2cdd";
+        sha256 = "0dhdxnb3k9z6mcsaqk78fpj3p6s8ndjmr6s8i00bwbv6g2s8dxs5";
       };
       outputs =
         [ "out"
           "core"
           "postgres"
           "migrate"
-          "sqlite"
         ];
       installPhase = ''
         mkdir -p $core
         mkdir -p $postgres
         mkdir -p $migrate
-        mkdir -p $sqlite
         mkdir -p $out
 
         cp -R ./beam-core/* $core
         cp -R ./beam-postgres/* $postgres
         cp -R ./beam-migrate/* $migrate
-        cp -R ./beam-sqlite/* $sqlite
       '';
     })
     {}
