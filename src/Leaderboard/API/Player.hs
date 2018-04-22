@@ -76,9 +76,9 @@ register
   -> RegisterPlayer
   -> m NoContent
 register (Authenticated Player{..}) rp =
-  case unAuto _playerIsAdmin of
-    Just True -> liftIO $ NoContent <$ addPlayer rp
-    _         -> throwError $ err403 {errBody = "Must be an admin to register a new player"}
+  if _playerIsAdmin
+    then liftIO $ NoContent <$ addPlayer rp
+    else throwError $ err403 {errBody = "Must be an admin to register a new player"}
 
 registerFirst
   :: ( HasDbConnPool r

@@ -1,31 +1,44 @@
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell    #-}
-{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 module Leaderboard.Schema.V_0_0_1 where
 
-import           Control.Lens                   (makeLenses)
-import           Crypto.JOSE                    (JWK)
+import           Control.Lens                             (makeLenses)
+import           Crypto.JOSE                              (JWK)
 import           Data.Aeson
-import           Data.ByteString                (ByteString)
-import           Data.Text                      (Text)
-import           Database.Beam
-import           Database.Beam.Migrate
-import           Database.Beam.Postgres
-import           Database.Beam.Postgres.Migrate
-import           Servant.Auth.Server            (FromJWT, ToJWT)
+import           Data.ByteString                          (ByteString)
+import           Data.Text                                (Text)
+import           Database.Beam                            (Auto (Auto), Beamable, C,
+                                                           Database, Generic,
+                                                           Identity, PrimaryKey,
+                                                           Table (PrimaryKey, primaryKey),
+                                                           TableEntity, val_)
+import           Database.Beam.Backend.SQL                (SqlSerial)
+import           Database.Beam.Migrate                    (CheckedDatabaseSettings,
+                                                           Migration,
+                                                           createTable,
+                                                           defaultTo_, double,
+                                                           field, int, notNull,
+                                                           varchar)
+import           Database.Beam.Migrate.SQL.BeamExtensions (genericSerial)
+import           Database.Beam.Postgres                   (PgCommandSyntax,
+                                                           Postgres)
+import           Database.Beam.Postgres.Migrate           (boolean, serial)
+import           Servant.Auth.Server                      (FromJWT, ToJWT)
 
 data RatingT f
   = Rating
-  { _ratingId         :: Columnar f (Auto Int)
-  , _ratingRating     :: Columnar f Double
-  , _ratingDev        :: Columnar f Double
-  , _ratingVol        :: Columnar f Double
-  , _ratingInactivity :: Columnar f Int
-  , _ratingAge        :: Columnar f Int
+  { _ratingId         :: C f (Auto Int)
+  , _ratingRating     :: C f Double
+  , _ratingDev        :: C f Double
+  , _ratingVol        :: C f Double
+  , _ratingInactivity :: C f Int
+  , _ratingAge        :: C f Int
   }
   deriving Generic
 
@@ -42,7 +55,7 @@ deriving instance Ord RatingId
 
 instance Beamable RatingT
 instance Table RatingT where
-  data PrimaryKey RatingT f = RatingId (Columnar f (Auto Int)) deriving Generic
+  data PrimaryKey RatingT f = RatingId (C f (Auto Int)) deriving Generic
   primaryKey = RatingId . _ratingId
 
 instance Beamable (PrimaryKey RatingT)
@@ -50,9 +63,9 @@ instance Beamable (PrimaryKey RatingT)
 data PlayerT f
   = Player
   { _playerId       :: C f (Auto Int)
-  , _playerUsername :: C f (Maybe Text)
+  , _playerUsername :: C f Text
   , _playerEmail    :: C f Text
-  , _playerIsAdmin  :: C f (Auto Bool)
+  , _playerIsAdmin  :: C f Bool
   }
   deriving Generic
 
@@ -60,7 +73,7 @@ type Player = PlayerT Identity
 type PlayerId = PrimaryKey PlayerT Identity
 
 instance ToJSON Player where
-  toJSON (Player (Auto a) b c d) =
+  toJSON (Player a b c d) =
     object
       [ "id" .= a
       , "username" .= b
@@ -89,7 +102,7 @@ deriving instance Ord PlayerId
 
 instance Beamable PlayerT
 instance Table PlayerT where
-  data PrimaryKey PlayerT f = PlayerId (Columnar f (Auto Int)) deriving Generic
+  data PrimaryKey PlayerT f = PlayerId (C f (Auto Int)) deriving Generic
   primaryKey = PlayerId . _playerId
 
 instance Beamable (PrimaryKey PlayerT)
@@ -97,8 +110,8 @@ instance Beamable (PrimaryKey PlayerT)
 
 data LadderT f
   = Ladder
-  { _ladderId    :: Columnar f (Auto Int)
-  , _ladderName  :: Columnar f Text
+  { _ladderId    :: C f (Auto Int)
+  , _ladderName  :: C f Text
   , _ladderOwner :: PrimaryKey PlayerT f
   }
   deriving Generic
@@ -116,7 +129,7 @@ type LadderId = PrimaryKey LadderT Identity
 
 instance Beamable LadderT
 instance Table LadderT where
-  data PrimaryKey LadderT f = LadderId (Columnar f (Auto Int)) deriving Generic
+  data PrimaryKey LadderT f = LadderId (C f (Auto Int)) deriving Generic
   primaryKey = LadderId . _ladderId
 
 instance Beamable (PrimaryKey LadderT)
@@ -196,7 +209,7 @@ migration () =
       (field "id" serial)
       (field "name" (varchar Nothing) notNull)
       (field "email" (varchar Nothing) notNull)
-      (field "is_admin" boolean (defaultTo_ (val_ (Auto (Just False)))) notNull)
+      (field "is_admin" boolean notNull)
     ) <*>
   createTable "ladders"
     (Ladder
