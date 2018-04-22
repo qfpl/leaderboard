@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -23,12 +22,13 @@ import           Data.Text                                (Text)
 import           Database.Beam
 import           Database.Beam.Backend.SQL.BeamExtensions
 import           Network.HTTP.Client.TLS
-import           Servant                                  (Server, (:<|>) ((:<|>)),
+import           Servant                                  ((:<|>) ((:<|>)),
                                                            (:>), Header,
                                                            Headers, JSON,
                                                            NoContent (NoContent),
                                                            Post, PostNoContent,
-                                                           ReqBody, ServerT,
+                                                           ReqBody, ServantErr,
+                                                           Server, ServerT,
                                                            err401, err403,
                                                            errBody)
 import           Servant.Auth.Server                      (Auth, AuthResult (Authenticated),
@@ -43,8 +43,7 @@ import           Leaderboard.Env                          (HasDbConnPool,
 import           Leaderboard.Queries                      (addPlayer,
                                                            selectPlayerCount)
 import           Leaderboard.Schema                       (Player, PlayerT (..))
-import           Leaderboard.Types                        (LeaderboardError (ServantError),
-                                                           RegisterPlayer (..))
+import           Leaderboard.Types                        (RegisterPlayer (..))
 
 type PlayerAPI auths =
        Auth auths Player :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
@@ -57,7 +56,7 @@ playerServer
      , MonadBaseControl IO m
      , MonadIO m
      , MonadReader r m
-     , MonadError LeaderboardError m
+     , MonadError ServantErr m
      )
   => CookieSettings
   -> JWTSettings
@@ -71,7 +70,7 @@ register
      , MonadBaseControl IO m
      , MonadIO m
      , MonadReader r m
-     , MonadError LeaderboardError m
+     , MonadError ServantErr m
      )
   => AuthResult Player
   -> RegisterPlayer
@@ -79,14 +78,14 @@ register
 register (Authenticated Player{..}) rp =
   case unAuto _playerIsAdmin of
     Just True -> liftIO $ NoContent <$ addPlayer rp
-    _         -> throwError . ServantError $ err403 {errBody = "Must be an admin to register a new player"}
+    _         -> throwError $ err403 {errBody = "Must be an admin to register a new player"}
 
 registerFirst
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
      , MonadIO m
      , MonadReader r m
-     , MonadError LeaderboardError m
+     , MonadError ServantErr m
      )
   => CookieSettings
   -> JWTSettings
@@ -97,12 +96,12 @@ registerFirst cs jwts rp =
     numPlayers <- liftIO $ selectPlayerCount c
     if numPlayers < 1
       then addFirstPlayer cs jwts rp
-      else throwError . ServantError $ err403 { errBody = "First user already added." }
+      else throwError $ err403 { errBody = "First user already added." }
 
 addFirstPlayer
   :: ( MonadBaseControl IO m
      , MonadIO m
-     , MonadError LeaderboardError m
+     , MonadError ServantErr m
      )
   => CookieSettings
   -> JWTSettings
@@ -113,5 +112,5 @@ addFirstPlayer cs jwts rp = do
   p <- liftIO . addPlayer $ rp {_lbrIsAdmin = Just True}
   mApplyCookies <- liftIO $ acceptLogin cs jwts p
   case mApplyCookies of
-    Nothing           -> throwError . ServantError $ err401
+    Nothing           -> throwError err401
     Just applyCookies -> pure $ applyCookies NoContent
