@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Leaderboard.Schema
@@ -11,14 +10,13 @@ where
 
 import           Control.Exception           (catch)
 import           Control.Monad               (void)
-import           Database.Beam               (DatabaseSettings, MonadBeam)
-import           Database.Beam.Backend       (runNoReturn, withDatabaseDebug)
+import           Database.Beam
+import           Database.Beam.Backend       (runNoReturn)
 import           Database.Beam.Migrate       (CheckedDatabaseSettings,
                                               MigrationSteps, evaluateDatabase,
                                               migrationStep, unCheckDatabase)
 import           Database.Beam.Migrate.Types (executeMigration)
-import           Database.Beam.Postgres      (Connection, Pg, PgCommandSyntax,
-                                              Postgres)
+import           Database.Beam.Postgres
 
 import           Database.PgErrors           (pgExceptionToError)
 import qualified Leaderboard.Schema.V_0_0_1  as V_0_0_1 (migration)
@@ -38,7 +36,6 @@ createSchema
   -> IO (Either LeaderboardError ())
 createSchema conn =
   let
-    exeMigration :: Pg (CheckedDatabaseSettings Postgres LeaderboardDb)
     exeMigration = executeMigration runNoReturn (V_0_0_1.migration ())
   in
     pgExceptionToError . void $ withDatabaseDebug putStrLn conn exeMigration

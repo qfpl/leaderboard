@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeOperators         #-}
 
 module Leaderboard.API where
@@ -11,11 +12,12 @@ import           Control.Monad.Reader        (MonadReader)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.Text                   (Text)
 import           Servant                     ((:<|>) ((:<|>)), Get, PlainText,
-                                              ServerT, ServantErr)
+                                              ServerT)
 import           Servant.Auth.Server         (AuthResult, CookieSettings, JWTSettings)
 
 import           Leaderboard.API.Player      (PlayerAPI, playerServer)
 import           Leaderboard.Env             (HasDbConnPool)
+import           Leaderboard.Types           (LeaderboardError)
 
 type LeaderboardAPI auths = PlayerAPI auths
 
@@ -24,7 +26,7 @@ leaderboardServer
      , MonadBaseControl IO m
      , MonadReader env m
      , MonadIO m
-     , MonadError ServantErr  m
+     , MonadError LeaderboardError  m
      )
   => CookieSettings
   -> JWTSettings

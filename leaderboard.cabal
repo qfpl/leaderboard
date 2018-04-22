@@ -31,9 +31,9 @@ library
   -- other-extensions:    
   build-depends:       base >=4.9 && <4.11
                      , aeson >=1.1.2.0 && <1.2
-                     , beam-core >=0.6.1.0 && <0.8
-                     , beam-postgres >=0.2.0.0 && <0.4
-                     , beam-migrate >=0.1.0.0 && <0.4
+                     , beam-core >=0.5.0.0 && <0.6
+                     , beam-postgres >=0.1.0.0 && <0.2
+                     , beam-migrate >=0.1.0.0 && <0.2
                      , bytestring >=0.9.1 && <0.11
                      , cryptonite >=0.7 && <0.26
                      , http-client-tls >=0.3.5.1 && <0.4
