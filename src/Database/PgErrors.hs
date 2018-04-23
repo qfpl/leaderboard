@@ -19,15 +19,8 @@ pgExceptionToError =
   tryJust fromPgException
   where
     fromPgException se
-      | isExceptionOfType @SqlError se = PostgresError . PgSqlError <$> fromException se
-      | isExceptionOfType @FormatError se = PostgresError . PgFormatError <$> fromException se
-  -- pure $ either (Left . PostgresError . handlePgError) Right a'
-  -- where
-  --   handlePgError se
-  --     | isExceptionOfType @SqlError se = PgSqlError
-  --     case e' of
-  --       e@SqlError{..} -> PgSqlError e
-  --       e@FormatError{..} -> PgFormatError e
+      | isExceptionOfType @SqlError se = toPgError se PgSqlError
+      | isExceptionOfType @FormatError se = toPgError se PgFormatError
 
 isExceptionOfType
   :: forall e.
