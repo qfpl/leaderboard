@@ -63,12 +63,13 @@ register
   -> RegisterPlayer
   -> m NoContent
 register arp rp =
+  withLabel (Label "/register") $
   case arp of
     Authenticated Player{..} ->
       if _playerIsAdmin
         then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
         else throwError $ err401 {errBody = "Must be an admin to register a new player"}
-    ar -> withLabel (Label "register") $ do
+    ar ->  do
       Log.info $ "Failed authentication: " <> T.pack (show ar)
       throwError $ err401 {errBody = BSL8.pack (show ar)}
 
