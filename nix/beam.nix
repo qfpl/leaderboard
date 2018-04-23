@@ -1,6 +1,6 @@
 { nixpkgs ? import <nixpkgs> {} }:
 nixpkgs.callPackage
-  ({ fetchFromGitHub }: 
+  ({ fetchFromGitHub }:
   nixpkgs.stdenv.mkDerivation {
       name = "beam";
       src = fetchFromGitHub {

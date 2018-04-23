@@ -2,8 +2,8 @@
 , bytestring, cryptonite, hedgehog, http-client-tls, jose, lens
 , monad-control, monad-log, mtl, optparse-applicative
 , postgresql-simple, product-profunctors, resource-pool, retry
-, servant-auth, servant-auth-server, servant-server, stdenv, text
-, transformers-base, uri-bytestring, warp
+, scrypt, servant-auth, servant-auth-server, servant-server, stdenv
+, text, transformers-base, uri-bytestring, warp
 }:
 mkDerivation {
   pname = "leaderboard";
@@ -15,8 +15,8 @@ mkDerivation {
     aeson base beam-core beam-migrate beam-postgres bytestring
     cryptonite http-client-tls jose lens monad-control monad-log mtl
     optparse-applicative postgresql-simple product-profunctors
-    resource-pool retry servant-auth servant-auth-server servant-server
-    text transformers-base uri-bytestring warp
+    resource-pool retry scrypt servant-auth servant-auth-server
+    servant-server text transformers-base uri-bytestring warp
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [ base hedgehog ];

@@ -1,27 +1,39 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE RecordWildCards       #-}
+
 module Leaderboard.Queries
   ( selectOrPersistJwk
   , selectPlayerCount
   , addPlayer
   ) where
 
-import           Control.Lens
-import           Crypto.JOSE                (JWK)
-import           Data.Aeson                 (eitherDecode')
-import           Data.Aeson.Text            (encodeToLazyText)
-import           Data.Functor               (($>))
-import           Data.Text.Lazy             (fromStrict, toStrict)
-import           Data.Text.Lazy.Encoding    (decodeUtf8, encodeUtf8)
-import qualified Database.Beam              as B
-import           Database.PgErrors          (pgExceptionToError)
-import           Database.PostgreSQL.Simple (Connection)
+import           Control.Lens                             ()
+import           Control.Monad                            (void)
+import           Crypto.JOSE                              (JWK)
+import           Crypto.Scrypt                            (Pass (Pass),
+                                                           encryptPassIO')
+import           Data.Aeson                               (eitherDecode')
+import           Data.Aeson.Text                          (encodeToLazyText)
+import           Data.Functor                             (($>))
+import           Data.Maybe                               (fromMaybe,
+                                                           listToMaybe)
+import qualified Data.Text.Encoding                       as TE
+import           Data.Text.Lazy                           (fromStrict, toStrict)
+import qualified Data.Text.Lazy.Encoding                  as TLE
+import qualified Database.Beam                            as B
+import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
+import           Database.Beam.Backend.SQL.SQL92          (Sql92SelectSyntax)
+import           Database.PgErrors                        (pgExceptionToError)
+import           Database.PostgreSQL.Simple               (Connection)
 
-import           Leaderboard.Schema         (Jwk, JwkT (..), Player,
-                                             leaderboardDb, _leaderboardJwk)
-import           Leaderboard.Types          (LeaderboardError (JwkDecodeError, MultipleJwksInDb),
-                                             RegisterPlayer)
+import           Leaderboard.Schema                       (Jwk, JwkT (..),
+                                                           LeaderboardDb (..),
+                                                           Player,
+                                                           PlayerT (Player),
+                                                           leaderboardDb)
+import           Leaderboard.Types                        (LeaderboardError (JwkDecodeError, MultipleJwksInDb),
+                                                           RegisterPlayer (..))
 
-withDb =
-  B.withDatabaseDebug putStrLn
 
 selectOrPersistJwk
   :: Connection
@@ -44,7 +56,7 @@ selectJwks conn = do
     B.runSelectReturningList .
     B.select $
       B.all_ (_leaderboardJwk leaderboardDb)
-  pure $ traverse (eitherDecode' . encodeUtf8 . fromStrict . _jwkJwk) jwks
+  pure $ traverse (eitherDecode' . TLE.encodeUtf8 . fromStrict . _jwkJwk) jwks
 
 insertJwk
   :: Connection
@@ -57,11 +69,8 @@ insertJwk conn jwk = do
       Jwk { _jwkId = B.Auto Nothing
           , _jwkJwk = toStrict . encodeToLazyText $ jwk'
           }
-  pgExceptionToError .
-    withDb conn .
-    B.runInsert .
-    B.insert (_leaderboardJwk leaderboardDb) $
-    B.insertValues [dbJwk]
+  pgExceptionToError . void $
+    insertValues conn (_leaderboardJwk leaderboardDb) [dbJwk]
 
 selectPlayerCount
   :: Connection
@@ -70,7 +79,26 @@ selectPlayerCount =
   undefined
 
 addPlayer
-  :: RegisterPlayer
-  -> IO Player
-addPlayer =
-  undefined
+  :: Connection
+  -> RegisterPlayer
+  -> IO (Maybe Player)
+addPlayer conn LeaderboardRegistration{..} = do
+  pass <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
+  let
+    isAdmin = fromMaybe False _lbrIsAdmin
+    newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail isAdmin
+  listToMaybe <$> insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
+
+-- Unsure of the types for the following, and the inferred types cause compiler errors
+insertValues conn table vals =
+    withDb conn .
+    Be.runInsertReturningList table $
+    B.insertValues vals
+
+selectList conn query =
+  withDb conn .
+  B.runSelectReturningList $
+  B.select query
+
+withDb =
+  B.withDatabaseDebug putStrLn

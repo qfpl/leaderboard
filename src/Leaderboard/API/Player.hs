@@ -30,7 +30,7 @@ import           Servant                                  ((:<|>) ((:<|>)),
                                                            ReqBody, ServantErr,
                                                            Server, ServerT,
                                                            err401, err403,
-                                                           errBody)
+                                                           errBody, err500)
 import           Servant.Auth.Server                      (Auth, AuthResult (Authenticated),
                                                            CookieSettings,
                                                            JWTSettings,
@@ -77,7 +77,7 @@ register
   -> m NoContent
 register (Authenticated Player{..}) rp =
   if _playerIsAdmin
-    then liftIO $ NoContent <$ addPlayer rp
+    then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
     else throwError $ err403 {errBody = "Must be an admin to register a new player"}
 
 registerFirst
@@ -102,14 +102,19 @@ addFirstPlayer
   :: ( MonadBaseControl IO m
      , MonadIO m
      , MonadError ServantErr m
+     , MonadReader r m
+     , HasDbConnPool r
      )
   => CookieSettings
   -> JWTSettings
   -> RegisterPlayer
   -> m (AuthHeaders NoContent)
 addFirstPlayer cs jwts rp = do
+  let
+    playerThrow = throwError $ err500 { errBody = "User registration failed" }
   -- Force admin flag to true for first registration
-  p <- liftIO . addPlayer $ rp {_lbrIsAdmin = Just True}
+  mp <- withConn $ \conn -> liftIO . addPlayer conn $ rp {_lbrIsAdmin = Just True}
+  p <- maybe playerThrow pure mp
   mApplyCookies <- liftIO $ acceptLogin cs jwts p
   case mApplyCookies of
     Nothing           -> throwError err401
