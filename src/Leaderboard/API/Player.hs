@@ -91,12 +91,12 @@ registerFirst
   -> JWTSettings
   -> RegisterPlayer
   -> m (AuthHeaders NoContent)
-registerFirst cs jwts rp =
-  withConn $ \c -> do
-    numPlayers <- liftIO $ selectPlayerCount c
-    if numPlayers < 1
-      then addFirstPlayer cs jwts rp
-      else throwError $ err403 { errBody = "First user already added." }
+registerFirst cs jwts rp = do
+  numPlayers' <- withConn $ liftIO . selectPlayerCount
+  numPlayers <- either (const $ throwError err500) pure numPlayers'
+  if numPlayers < 1
+    then addFirstPlayer cs jwts rp
+    else throwError $ err403 { errBody = "First user already added." }
 
 addFirstPlayer
   :: ( MonadBaseControl IO m

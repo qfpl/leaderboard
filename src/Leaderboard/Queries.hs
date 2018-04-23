@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.Queries
   ( selectOrPersistJwk
@@ -31,7 +32,7 @@ import           Leaderboard.Schema                       (Jwk, JwkT (..),
                                                            Player,
                                                            PlayerT (Player),
                                                            leaderboardDb)
-import           Leaderboard.Types                        (LeaderboardError (JwkDecodeError, MultipleJwksInDb),
+import           Leaderboard.Types                        (LeaderboardError (..),
                                                            RegisterPlayer (..))
 
 
@@ -51,11 +52,7 @@ selectJwks
   :: Connection
   -> IO (Either String [JWK])
 selectJwks conn = do
-  jwks <-
-    withDb conn .
-    B.runSelectReturningList .
-    B.select $
-      B.all_ (_leaderboardJwk leaderboardDb)
+  jwks <- selectList conn $ B.all_ (_leaderboardJwk leaderboardDb)
   pure $ traverse (eitherDecode' . TLE.encodeUtf8 . fromStrict . _jwkJwk) jwks
 
 insertJwk
@@ -74,9 +71,10 @@ insertJwk conn jwk = do
 
 selectPlayerCount
   :: Connection
-  -> IO Integer
-selectPlayerCount =
-  undefined
+  -> IO (Either LeaderboardError Integer)
+selectPlayerCount conn =
+  maybe (Left . DbError $ "Player count returned `Nothing`") (Right . fromIntegral) <$>
+    countAll conn (B.all_ $ _leaderboardPlayers leaderboardDb)
 
 addPlayer
   :: Connection
@@ -99,6 +97,11 @@ selectList conn query =
   withDb conn .
   B.runSelectReturningList $
   B.select query
+
+countAll conn table =
+  withDb conn .
+  B.runSelectReturningOne .
+  B.select $ B.aggregate_  (const B.countAll_) table
 
 withDb =
   B.withDatabaseDebug putStrLn

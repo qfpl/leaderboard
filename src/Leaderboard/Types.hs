@@ -9,7 +9,7 @@ import           Data.Aeson                 (FromJSON, parseJSON, withObject,
 import           Data.Text                  (Text)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
-import           Servant                    (ServantErr)
+import           Servant                    (ServantErr, err500)
 
 data RegisterPlayer
   = LeaderboardRegistration
@@ -34,6 +34,7 @@ data LeaderboardError =
   | PostgresError PostgresException
   | MultipleJwksInDb [JWK]
   | JwkDecodeError
+  | DbError Text
   deriving (Eq, Show)
 
 data PostgresException =
