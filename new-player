@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+if (( $# != 3 )); then
+  echo "Must provide <name> <email> <true/false> as args"
+  exit 1
+fi
+
+echo "{\"email\": \"${2}\", \"name\": \"${1}\", \"password\": \"pass\", \"isAdmin\": ${3}}"

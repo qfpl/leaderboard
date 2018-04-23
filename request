@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+curl --insecure -v -H "Content-Type: application/json" -d "$2" -b cookiejar -c cookiejar -i "https://localhost:7645/${1}"
