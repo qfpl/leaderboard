@@ -5,31 +5,23 @@
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 module Leaderboard.Schema.V_0_0_1 where
 
-import           Control.Lens                             (makeLenses)
-import           Crypto.JOSE                              (JWK)
+import           Control.Lens                   (makeLenses)
 import           Data.Aeson
-import           Data.ByteString                          (ByteString)
-import           Data.Text                                (Text)
-import           Database.Beam                            (Auto (Auto), Beamable, C,
-                                                           Database, Generic,
-                                                           Identity, PrimaryKey,
-                                                           Table (PrimaryKey, primaryKey),
-                                                           TableEntity, val_)
-import           Database.Beam.Backend.SQL                (SqlSerial)
-import           Database.Beam.Migrate                    (CheckedDatabaseSettings,
-                                                           Migration,
-                                                           createTable,
-                                                           defaultTo_, double,
-                                                           field, int, notNull,
-                                                           varchar)
-import           Database.Beam.Migrate.SQL.BeamExtensions (genericSerial)
-import           Database.Beam.Postgres                   (PgCommandSyntax,
-                                                           Postgres)
-import           Database.Beam.Postgres.Migrate           (boolean, serial)
-import           Servant.Auth.Server                      (FromJWT, ToJWT)
+import           Data.Text                      (Text)
+import           Database.Beam                  (Auto, Beamable, C, Database,
+                                                 Generic, Identity, PrimaryKey,
+                                                 Table (PrimaryKey, primaryKey),
+                                                 TableEntity)
+import           Database.Beam.Migrate          (CheckedDatabaseSettings,
+                                                 Migration, createTable, double,
+                                                 field, int, notNull, varchar)
+import           Database.Beam.Postgres         (PgCommandSyntax, Postgres)
+import           Database.Beam.Postgres.Migrate (boolean, serial)
+import           Servant.Auth.Server            (FromJWT, ToJWT)
 
 data RatingT f
   = Rating

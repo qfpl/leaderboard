@@ -9,7 +9,7 @@ import           Data.Aeson                 (FromJSON, parseJSON, withObject,
 import           Data.Text                  (Text)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
-import           Servant                    (ServantErr, err500)
+import           Servant                    (ServantErr)
 
 data RegisterPlayer
   = LeaderboardRegistration
