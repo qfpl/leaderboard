@@ -6,7 +6,7 @@
 module Leaderboard.API where
 
 import           Control.Monad.Except        (MonadError)
-import           Control.Monad.IO.Class      (MonadIO)
+import           Control.Monad.Log           (MonadLog)
 import           Control.Monad.Reader        (MonadReader)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Servant                     (ServerT, ServantErr)
@@ -21,8 +21,8 @@ leaderboardServer
   :: ( HasDbConnPool env
      , MonadBaseControl IO m
      , MonadReader env m
-     , MonadIO m
      , MonadError ServantErr  m
+     , MonadLog l m
      )
   => CookieSettings
   -> JWTSettings

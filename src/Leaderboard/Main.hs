@@ -2,19 +2,13 @@
 
 module Leaderboard.Main where
 
-import           Control.Exception
 import           Control.Monad.Log           (LogType (..), levelDebug,
                                               makeDefaultLogger,
                                               simpleTimeFormat)
-import           Control.Retry               (constantDelay, defaultLogMsg,
-                                              exponentialBackoff, limitRetries,
-                                              logRetries, recoverAll,
-                                              recovering)
-import qualified Data.ByteString.Char8       as C8
-import           Data.Either
-import           Data.Monoid
+import           Control.Retry               (exponentialBackoff, limitRetries,
+                                              recoverAll)
 import           Data.Pool                   (Pool, createPool, withResource)
-import qualified Data.Text                   as T
+import           Data.Semigroup              ((<>))
 import           Data.Word                   (Word16)
 import           Database.PostgreSQL.Simple
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
@@ -22,7 +16,6 @@ import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import           Options.Applicative
 import           System.Environment
 import           System.Exit                 (ExitCode (ExitFailure), exitWith)
-import           URI.ByteString
 
 import           Leaderboard.Application     (leaderboard)
 import           Leaderboard.Env             (Env (Env), genJwk)
@@ -106,8 +99,8 @@ mkConnectionPool ApplicationOptions{..} pass =
     numStripes = 1
     anHourInSeconds = 3600
     maxOpenConnections = 20
-    info = ConnectInfo aoDbHost aoDbPort aoDbUser pass aoDbName
+    ci = ConnectInfo aoDbHost aoDbPort aoDbUser pass aoDbName
     retryingConnect =
       recoverAll
         (exponentialBackoff 200 <> limitRetries 10)
-        (\_ -> putStrLn "Attempting to connect to database..." *> connect info)
+        (\_ -> putStrLn "Attempting to connect to database..." *> connect ci)

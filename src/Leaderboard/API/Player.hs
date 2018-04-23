@@ -9,10 +9,13 @@ module Leaderboard.API.Player where
 
 import           Control.Monad.Except        (MonadError, throwError)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
-import           Control.Monad.Log           as Log
+import           Control.Monad.Log           (MonadLog)
+import qualified Control.Monad.Log           as Log
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Data.ByteString.Lazy.Char8  (pack)
+import qualified Data.ByteString.Lazy.Char8  as BSL8
+import           Data.Semigroup              ((<>))
+import qualified Data.Text                   as T
 import           Servant                     ((:<|>) ((:<|>)), (:>), Header,
                                               Headers, JSON,
                                               NoContent (NoContent),
@@ -37,9 +40,9 @@ type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie"
 playerServer
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
-     , MonadIO m
      , MonadReader r m
      , MonadError ServantErr m
+     , MonadLog l m
      )
   => CookieSettings
   -> JWTSettings
@@ -51,9 +54,9 @@ playerServer cs jwts =
 register
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
-     , MonadIO m
      , MonadReader r m
      , MonadError ServantErr m
+     , MonadLog l m
      )
   => AuthResult Player
   -> RegisterPlayer
@@ -64,7 +67,9 @@ register arp rp =
       if _playerIsAdmin
         then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
         else throwError $ err401 {errBody = "Must be an admin to register a new player"}
-    ar -> throwError $ err401 {errBody = pack (show ar)}
+    ar -> do
+      Log.info . T.pack $ "Failed authentication: " <> show ar
+      throwError $ err401 {errBody = BSL8.pack (show ar)}
 
 registerFirst
   :: ( HasDbConnPool r

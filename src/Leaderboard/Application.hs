@@ -9,7 +9,7 @@ import           Servant             ((:~>), Application,
                                       Context ((:.), EmptyContext), Handler,
                                       enter, serveWithContext)
 import           Servant.Auth        (JWT, Cookie)
-import           Servant.Auth.Server (JWT, defaultCookieSettings,
+import           Servant.Auth.Server (defaultCookieSettings,
                                       defaultJWTSettings)
 
 import           Leaderboard.API     (LeaderboardAPI, leaderboardServer)
