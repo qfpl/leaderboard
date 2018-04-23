@@ -8,7 +8,7 @@ import           Data.Proxy          (Proxy (Proxy))
 import           Servant             ((:~>), Application,
                                       Context ((:.), EmptyContext), Handler,
                                       enter, serveWithContext)
-import           Servant.Auth        (JWT)
+import           Servant.Auth        (JWT, Cookie)
 import           Servant.Auth.Server (JWT, defaultCookieSettings,
                                       defaultJWTSettings)
 
@@ -21,7 +21,7 @@ leaderboard env logger =
   let
     jwtCfg = defaultJWTSettings (_envJWK env)
     cfg = defaultCookieSettings :. jwtCfg :. EmptyContext
-    api = Proxy :: Proxy (LeaderboardAPI '[JWT])
+    api = Proxy :: Proxy (LeaderboardAPI '[JWT, Cookie])
     toHandler' :: LHandlerT Env Handler :~> Handler
     toHandler' = toHandler env logger
     server = leaderboardServer defaultCookieSettings jwtCfg

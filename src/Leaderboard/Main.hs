@@ -3,29 +3,31 @@
 module Leaderboard.Main where
 
 import           Control.Exception
-import           Control.Monad.Log          (LogType (..), levelDebug,
-                                             makeDefaultLogger,
-                                             simpleTimeFormat)
-import           Control.Retry              (constantDelay, defaultLogMsg,
-                                             exponentialBackoff, limitRetries,
-                                             logRetries, recoverAll, recovering)
-import qualified Data.ByteString.Char8      as C8
+import           Control.Monad.Log           (LogType (..), levelDebug,
+                                              makeDefaultLogger,
+                                              simpleTimeFormat)
+import           Control.Retry               (constantDelay, defaultLogMsg,
+                                              exponentialBackoff, limitRetries,
+                                              logRetries, recoverAll,
+                                              recovering)
+import qualified Data.ByteString.Char8       as C8
 import           Data.Either
 import           Data.Monoid
-import           Data.Pool                  (Pool, createPool, withResource)
-import qualified Data.Text                  as T
-import           Data.Word                  (Word16)
+import           Data.Pool                   (Pool, createPool, withResource)
+import qualified Data.Text                   as T
+import           Data.Word                   (Word16)
 import           Database.PostgreSQL.Simple
-import           Network.Wai.Handler.Warp
+import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
+import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import           Options.Applicative
 import           System.Environment
-import           System.Exit                (ExitCode (ExitFailure), exitWith)
+import           System.Exit                 (ExitCode (ExitFailure), exitWith)
 import           URI.ByteString
 
-import           Leaderboard.Application    (leaderboard)
-import           Leaderboard.Env            (Env (Env), genJwk)
-import           Leaderboard.Queries        (selectOrPersistJwk)
-import           Leaderboard.Schema         (createSchema)
+import           Leaderboard.Application     (leaderboard)
+import           Leaderboard.Env             (Env (Env), genJwk)
+import           Leaderboard.Queries         (selectOrPersistJwk)
+import           Leaderboard.Schema          (createSchema)
 
 data ApplicationOptions
   = ApplicationOptions
@@ -80,7 +82,9 @@ runApp pool port = do
     makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
   jwk <- withResource pool (`selectOrPersistJwk` genJwk)
   let
-    doIt jwk' = run port $ leaderboard (Env pool jwk') logger
+    tlsOpts = tlsSettings "cert.pem" "key.pem"
+    warpOpts = setPort port defaultSettings
+    doIt jwk' = runTLS tlsOpts warpOpts $ leaderboard (Env pool jwk') logger
     exitFail e = do
       putStrLn $ "Error with JWK: " <> show e
       exitWith . ExitFailure $ 1

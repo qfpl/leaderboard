@@ -3,7 +3,7 @@
 , monad-control, monad-log, mtl, optparse-applicative
 , postgresql-simple, product-profunctors, resource-pool, retry
 , scrypt, servant-auth, servant-auth-server, servant-server, stdenv
-, text, transformers-base, uri-bytestring, warp
+, text, transformers-base, uri-bytestring, warp, warp-tls
 }:
 mkDerivation {
   pname = "leaderboard";
@@ -16,7 +16,7 @@ mkDerivation {
     cryptonite http-client-tls jose lens monad-control monad-log mtl
     optparse-applicative postgresql-simple product-profunctors
     resource-pool retry scrypt servant-auth servant-auth-server
-    servant-server text transformers-base uri-bytestring warp
+    servant-server text transformers-base uri-bytestring warp warp-tls
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [ base hedgehog ];

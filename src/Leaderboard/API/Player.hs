@@ -7,43 +7,26 @@
 
 module Leaderboard.API.Player where
 
-import           Control.Lens
-import           Control.Monad                            (void)
-import           Control.Monad.Except                     (MonadError,
-                                                           throwError)
-import           Control.Monad.IO.Class                   (MonadIO, liftIO)
-import           Control.Monad.Log                        as Log
+import           Control.Monad.Except        (MonadError, throwError)
+import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.Log           as Log
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Control              (MonadBaseControl)
-import           Data.Aeson                               (FromJSON, parseJSON,
-                                                           withObject, (.:))
-import           Data.Semigroup                           ((<>))
-import           Data.Text                                (Text)
-import           Database.Beam
-import           Database.Beam.Backend.SQL.BeamExtensions
-import           Network.HTTP.Client.TLS
-import           Servant                                  ((:<|>) ((:<|>)),
-                                                           (:>), Header,
-                                                           Headers, JSON,
-                                                           NoContent (NoContent),
-                                                           Post, PostNoContent,
-                                                           ReqBody, ServantErr,
-                                                           Server, ServerT,
-                                                           err401, err403,
-                                                           errBody, err500)
-import           Servant.Auth.Server                      (Auth, AuthResult (Authenticated),
-                                                           CookieSettings,
-                                                           JWTSettings,
-                                                           SetCookie,
-                                                           acceptLogin)
-import           URI.ByteString.QQ
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Data.ByteString.Lazy.Char8  (pack)
+import           Servant                     ((:<|>) ((:<|>)), (:>), Header,
+                                              Headers, JSON,
+                                              NoContent (NoContent),
+                                              PostNoContent, ReqBody,
+                                              ServantErr, ServerT, err401,
+                                              err403, err500, errBody)
+import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
+                                              CookieSettings, JWTSettings,
+                                              SetCookie, acceptLogin)
 
-import           Leaderboard.Env                          (HasDbConnPool,
-                                                           withConn)
-import           Leaderboard.Queries                      (addPlayer,
-                                                           selectPlayerCount)
-import           Leaderboard.Schema                       (Player, PlayerT (..))
-import           Leaderboard.Types                        (RegisterPlayer (..))
+import           Leaderboard.Env             (HasDbConnPool, withConn)
+import           Leaderboard.Queries         (addPlayer, selectPlayerCount)
+import           Leaderboard.Schema          (Player, PlayerT (..))
+import           Leaderboard.Types           (RegisterPlayer (..))
 
 type PlayerAPI auths =
        Auth auths Player :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
@@ -75,10 +58,13 @@ register
   => AuthResult Player
   -> RegisterPlayer
   -> m NoContent
-register (Authenticated Player{..}) rp =
-  if _playerIsAdmin
-    then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
-    else throwError $ err403 {errBody = "Must be an admin to register a new player"}
+register arp rp =
+  case arp of
+    Authenticated Player{..} ->
+      if _playerIsAdmin
+        then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
+        else throwError $ err401 {errBody = "Must be an admin to register a new player"}
+    ar -> throwError $ err401 {errBody = pack (show ar)}
 
 registerFirst
   :: ( HasDbConnPool r

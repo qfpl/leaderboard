@@ -9,10 +9,8 @@ import           Control.Monad.Except        (MonadError)
 import           Control.Monad.IO.Class      (MonadIO)
 import           Control.Monad.Reader        (MonadReader)
 import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Data.Text                   (Text)
-import           Servant                     ((:<|>) ((:<|>)), Get, PlainText,
-                                              ServerT, ServantErr)
-import           Servant.Auth.Server         (AuthResult, CookieSettings, JWTSettings)
+import           Servant                     (ServerT, ServantErr)
+import           Servant.Auth.Server         (CookieSettings, JWTSettings)
 
 import           Leaderboard.API.Player      (PlayerAPI, playerServer)
 import           Leaderboard.Env             (HasDbConnPool)

@@ -55,6 +55,7 @@ library
                      , transformers-base >=0.4 && <0.5
                      , uri-bytestring >=0.2.3.3 && <0.3
                      , warp >=3.2 && <3.3
+                     , warp-tls >=3.2 && <3.3
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall -Wredundant-constraints
