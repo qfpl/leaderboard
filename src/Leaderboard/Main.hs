@@ -1,10 +1,12 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.Main where
 
 import           Control.Monad.Log           (LogType (..), levelDebug,
                                               makeDefaultLogger,
                                               simpleTimeFormat)
+import           Control.Monad.Log.Label     (Label (Label))
 import           Control.Retry               (exponentialBackoff, limitRetries,
                                               recoverAll)
 import           Data.Pool                   (Pool, createPool, withResource)
@@ -72,7 +74,7 @@ runApp
   -> IO ()
 runApp pool port = do
   logger <-
-    makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug ()
+    makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug (Label "unlabeled")
   jwk <- withResource pool (`selectOrPersistJwk` genJwk)
   let
     tlsOpts = tlsSettings "cert.pem" "key.pem"

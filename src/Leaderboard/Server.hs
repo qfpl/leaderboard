@@ -13,22 +13,20 @@
 
 module Leaderboard.Server where
 
-import           Control.Lens
+import           Control.Lens                ()
 import           Control.Monad.Base          (MonadBase (liftBase))
 import           Control.Monad.Except        (MonadError (catchError, throwError))
 import           Control.Monad.Log           (LogT (LogT), Logger, MonadLog,
                                               askLogger, runLogT)
+import           Control.Monad.Log.Label     (Label)
 import           Control.Monad.Reader        (MonadReader, ReaderT (ReaderT),
                                               ask, runReaderT)
 import           Control.Monad.Trans         (MonadTrans (lift))
 import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (StM, liftBaseWith, restoreM),
                                               MonadTransControl (StT, liftWith, restoreT),
-                                              Run, defaultLiftBaseWith,
-                                              defaultLiftWith, defaultRestoreM,
-                                              defaultRestoreT)
+                                              defaultLiftBaseWith,
+                                              defaultRestoreM)
 
-import           Crypto.JOSE                 (JWK)
-import           Data.Functor.Identity       (Identity)
 import           Database.Beam
 import           Database.Beam.Postgres
 import           Servant                     ((:~>) (NT), Handler, ServantErr,
@@ -40,13 +38,13 @@ newtype LHandlerT env m a
   = LHandlerT
   { runLHandlerT
     -- :: ReaderT env (ExceptT ServantErr (LogT () IO)) a
-    :: ReaderT env (LogT () m) a
+    :: ReaderT env (LogT Label m) a
   } deriving
   ( Functor
   , Applicative
   , Monad
   , MonadReader env
-  , MonadLog ()
+  , MonadLog Label
   , MonadIO
   )
 
@@ -72,8 +70,6 @@ instance (MonadIO m, MonadBaseControl IO m) => MonadBaseControl IO (LHandlerT en
   liftBaseWith     = defaultLiftBaseWith
   restoreM         = defaultRestoreM
 
--- Run (LHandlerT env) = LHandlerT env n b -> n (StT (LHandlerT env) b)
-
 instance MonadTransControl (LHandlerT env) where
   type StT (LHandlerT env) a = StT (ReaderT env) a
   liftWith f =
@@ -94,7 +90,7 @@ liftQuery q m =
   withConn $ \conn ->
     liftIO $ withDatabase conn (q m)
 
-toHandler :: env -> Logger () -> (LHandlerT env m :~> m)
+toHandler :: env -> Logger Label -> (LHandlerT env m :~> m)
 toHandler env l =
   NT $
     flip runLogT l .

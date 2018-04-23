@@ -11,6 +11,7 @@ import           Control.Monad.Except        (MonadError, throwError)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
 import           Control.Monad.Log           (MonadLog)
 import qualified Control.Monad.Log           as Log
+import           Control.Monad.Log.Label     (Label (Label), withLabel)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import qualified Data.ByteString.Lazy.Char8  as BSL8
@@ -42,7 +43,7 @@ playerServer
      , MonadBaseControl IO m
      , MonadReader r m
      , MonadError ServantErr m
-     , MonadLog l m
+     , MonadLog Label m
      )
   => CookieSettings
   -> JWTSettings
@@ -56,7 +57,7 @@ register
      , MonadBaseControl IO m
      , MonadReader r m
      , MonadError ServantErr m
-     , MonadLog l m
+     , MonadLog Label m
      )
   => AuthResult Player
   -> RegisterPlayer
@@ -67,8 +68,8 @@ register arp rp =
       if _playerIsAdmin
         then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
         else throwError $ err401 {errBody = "Must be an admin to register a new player"}
-    ar -> do
-      Log.info . T.pack $ "Failed authentication: " <> show ar
+    ar -> withLabel (Label "register") $ do
+      Log.info $ "Failed authentication: " <> T.pack (show ar)
       throwError $ err401 {errBody = BSL8.pack (show ar)}
 
 registerFirst
