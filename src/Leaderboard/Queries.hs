@@ -5,14 +5,16 @@
 module Leaderboard.Queries
   ( selectOrPersistJwk
   , selectPlayerCount
-  , addPlayer
+  , insertPlayer
   ) where
 
 import           Control.Lens                             ()
 import           Control.Monad                            (void)
 import           Crypto.JOSE                              (JWK)
-import           Crypto.Scrypt                            (Pass (Pass),
-                                                           encryptPassIO')
+import           Crypto.Scrypt                            (EncryptedPass (..),
+                                                           Pass (..),
+                                                           encryptPassIO',
+                                                           getPass)
 import           Data.Aeson                               (eitherDecode')
 import           Data.Aeson.Text                          (encodeToLazyText)
 import           Data.Functor                             (($>))
@@ -76,15 +78,20 @@ selectPlayerCount conn =
   maybe (Left . DbError $ "Player count returned `Nothing`") (Right . fromIntegral) <$>
     countAll conn (B.all_ $ _leaderboardPlayers leaderboardDb)
 
-addPlayer
+selectPlayerById
+  :: Connection
+  -> Int
+  -> IO (Either leaderboardError Player)
+
+insertPlayer
   :: Connection
   -> RegisterPlayer
   -> IO (Maybe Player)
-addPlayer conn LeaderboardRegistration{..} = do
-  pass <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
+insertPlayer conn LeaderboardRegistration{..} = do
+  (EncryptedPass ePass) <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
   let
     isAdmin = fromMaybe False _lbrIsAdmin
-    newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail isAdmin
+    newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail ePass isAdmin
   listToMaybe <$> insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
 
 -- Unsure of the types for the following, and the inferred types cause compiler errors

@@ -28,13 +28,15 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               SetCookie, acceptLogin)
 
 import           Leaderboard.Env             (HasDbConnPool, withConn)
-import           Leaderboard.Queries         (addPlayer, selectPlayerCount)
+import           Leaderboard.Queries         (insertPlayer, selectPlayerCount)
 import           Leaderboard.Schema          (Player, PlayerT (..))
-import           Leaderboard.Types           (RegisterPlayer (..))
+import           Leaderboard.Types           (Login (..), PlayerSession (..),
+                                              RegisterPlayer (..))
 
 type PlayerAPI auths =
-       Auth auths Player :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
+       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] (AuthHeaders NoContent)
+  :<|> "login" :> ReqBody '[JSON] Login :> PostNoContent '[JSON] (AuthHeaders NoContent)
 
 type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
 
@@ -51,6 +53,7 @@ playerServer
 playerServer cs jwts =
        register
   :<|> registerFirst cs jwts
+  :<|> login cs jwts
 
 register
   :: ( HasDbConnPool r
@@ -59,16 +62,20 @@ register
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => AuthResult Player
+  => AuthResult PlayerSession
   -> RegisterPlayer
   -> m NoContent
 register arp rp =
   withLabel (Label "/register") $
   case arp of
-    Authenticated Player{..} ->
-      if _playerIsAdmin
-        then withConn $ \conn -> liftIO (NoContent <$ addPlayer conn rp)
-        else throwError $ err401 {errBody = "Must be an admin to register a new player"}
+    Authenticated PlayerSession{..} -> do
+      mPlayer <- withConn $ \conn -> liftIO . selectPlayerById conn _psId
+      case mPlayer of
+        Nothing -> throwError err401
+        Just Player{..} ->
+          if _playerIsAdmin
+            then withConn $ \conn -> liftIO (NoContent <$ insertPlayer conn rp)
+            else throwError $ err401 {errBody = "Must be an admin to register a new player"}
     ar ->  do
       Log.info $ "Failed authentication: " <> T.pack (show ar)
       throwError $ err401 {errBody = BSL8.pack (show ar)}
@@ -91,6 +98,23 @@ registerFirst cs jwts rp = do
     then addFirstPlayer cs jwts rp
     else throwError $ err403 { errBody = "First user already added." }
 
+login
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadIO m
+     , MonadReader r m
+     , MonadError ServantErr m
+     )
+  => CookieSettings
+  -> JWTSettings
+  -> Login
+  -> m (AuthHeaders NoContent)
+login cs jwts Login{..} = do
+  mPlayer <- withConn $ \conn -> liftIO $ selectPlayerByEmail conn _loginEmail
+  case mPlayer of
+    Nothing         -> throwError $ err401 { errBody = "Login failed" }
+    Just Player{..} -> _playerPassword
+
 addFirstPlayer
   :: ( MonadBaseControl IO m
      , MonadIO m
@@ -106,7 +130,7 @@ addFirstPlayer cs jwts rp = do
   let
     playerThrow = throwError $ err500 { errBody = "User registration failed" }
   -- Force admin flag to true for first registration
-  mp <- withConn $ \conn -> liftIO . addPlayer conn $ rp {_lbrIsAdmin = Just True}
+  mp <- withConn $ \conn -> liftIO . insertPlayer conn $ rp {_lbrIsAdmin = Just True}
   p <- maybe playerThrow pure mp
   mApplyCookies <- liftIO $ acceptLogin cs jwts p
   case mApplyCookies of

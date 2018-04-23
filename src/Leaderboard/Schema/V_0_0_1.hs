@@ -11,7 +11,9 @@ module Leaderboard.Schema.V_0_0_1 where
 
 import           Control.Lens                   (makeLenses)
 import           Data.Aeson
+import           Data.ByteString                (ByteString)
 import           Data.Text                      (Text)
+import           Data.Text.Encoding             (decodeUtf8, encodeUtf8)
 import           Database.Beam                  (Auto, Beamable, C, Database,
                                                  Generic, Identity, PrimaryKey,
                                                  Table (PrimaryKey, primaryKey),
@@ -19,8 +21,9 @@ import           Database.Beam                  (Auto, Beamable, C, Database,
 import           Database.Beam.Migrate          (CheckedDatabaseSettings,
                                                  Migration, createTable, double,
                                                  field, int, notNull, varchar)
+
 import           Database.Beam.Postgres         (PgCommandSyntax, Postgres)
-import           Database.Beam.Postgres.Migrate (boolean, serial)
+import           Database.Beam.Postgres.Migrate (boolean, bytea, serial)
 import           Servant.Auth.Server            (FromJWT, ToJWT)
 
 data RatingT f
@@ -57,6 +60,7 @@ data PlayerT f
   { _playerId       :: C f (Auto Int)
   , _playerUsername :: C f Text
   , _playerEmail    :: C f Text
+  , _playerPassword :: C f ByteString
   , _playerIsAdmin  :: C f Bool
   }
   deriving Generic
@@ -65,12 +69,13 @@ type Player = PlayerT Identity
 type PlayerId = PrimaryKey PlayerT Identity
 
 instance ToJSON Player where
-  toJSON (Player a b c d) =
+  toJSON (Player a b c d e) =
     object
       [ "id" .= a
       , "username" .= b
       , "email" .= c
-      , "isAdmin" .= d
+      , "password" .= decodeUtf8 d
+      , "isAdmin" .= e
       ]
 
 instance FromJSON Player where
@@ -80,6 +85,7 @@ instance FromJSON Player where
       v .: "id" <*>
       v .: "username" <*>
       v .: "email" <*>
+      (encodeUtf8 <$> v .: "password") <*>
       v .: "isAdmin"
 
 instance ToJWT Player
@@ -201,6 +207,7 @@ migration () =
       (field "id" serial)
       (field "name" (varchar Nothing) notNull)
       (field "email" (varchar Nothing) notNull)
+      (field "password" bytea notNull)
       (field "is_admin" boolean notNull)
     ) <*>
   createTable "ladders"

@@ -41,3 +41,12 @@ data PostgresException =
     PgSqlError Pg.SqlError
   | PgFormatError Pg.FormatError
   deriving (Eq, Show)
+
+data Login
+  = Login
+    { _loginEmail :: Text
+    , _loginPassword :: Text
+    }
+
+newtype PlayerSession
+  = PlayerSession { _psId :: Int }
