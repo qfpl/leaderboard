@@ -1,3 +1,35 @@
 #!/usr/bin/env bash
 
-curl --insecure -v -H "Content-Type: application/json" -d "$2" -b cookiejar -c cookiejar -i "https://localhost:7645/${1}"
+# COOKIE BASED AUTH SETTINGS
+#
+# X-XSRF-TOKEN header must be set for Cookie based auth on any requests that aren't GET or
+# if GET requests are required to be checked based on cookie settings. This token is provided
+# by the server as part of a login request. Copy and paste it into this script for dirty
+# smoke testing.
+#
+# -H "X-XSRF-TOKEN: ${xsrf_token}" \
+#
+# In addition, we need to tell curl to store and send cookies set by the server. `-b` will read
+# cookies from a file "cookiejar". Likewise, the `-c` option will send cookies stored in the
+# specified file
+#
+# -b cookiejar \
+# -c cookiejar \
+#
+#
+# TOKEN BASED AUTH
+#
+# Alternatively, the JWT can be specified in the request headers. Once again, copy and paste
+# the JWT from the login response cookies into the `jwt` assignment for quick and dirty testing.
+
+xsrf_token=""
+jwt=""
+
+curl --insecure \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer ${jwt}" \
+-d "$2" \
+-v \
+-i \
+"https://localhost:7645/${1}"
+
