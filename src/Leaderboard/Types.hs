@@ -4,12 +4,13 @@
 module Leaderboard.Types where
 
 import           Crypto.JOSE                (JWK)
-import           Data.Aeson                 (FromJSON, parseJSON, withObject,
-                                             (.:))
+import           Data.Aeson                 (FromJSON, ToJSON, parseJSON,
+                                             withObject, (.:))
 import           Data.Text                  (Text)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
+import           Servant.Auth.Server        (FromJWT, ToJWT)
 
 data RegisterPlayer
   = LeaderboardRegistration
@@ -45,9 +46,16 @@ data PostgresException =
 
 data Login
   = Login
-    { _loginEmail :: Text
+    { _loginEmail    :: Text
     , _loginPassword :: Text
     }
+    deriving Generic
+instance FromJSON Login
 
 newtype PlayerSession
   = PlayerSession { _psId :: Int }
+    deriving (Eq, Generic, Show)
+instance ToJWT PlayerSession
+instance FromJWT PlayerSession
+instance ToJSON PlayerSession
+instance FromJSON PlayerSession

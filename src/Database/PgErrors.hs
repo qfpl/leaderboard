@@ -21,6 +21,7 @@ pgExceptionToError =
     fromPgException se
       | isExceptionOfType @SqlError se = toPgError se PgSqlError
       | isExceptionOfType @FormatError se = toPgError se PgFormatError
+      | otherwise = Nothing
 
 isExceptionOfType
   :: forall e.

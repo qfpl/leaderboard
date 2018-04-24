@@ -8,15 +8,19 @@
 module Leaderboard.API.Player where
 
 import           Control.Monad.Except        (MonadError, throwError)
-import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Log           (MonadLog)
 import qualified Control.Monad.Log           as Log
 import           Control.Monad.Log.Label     (Label (Label), withLabel)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
+                                              verifyPass')
 import qualified Data.ByteString.Lazy.Char8  as BSL8
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as T
+import           Data.Text.Encoding          (encodeUtf8)
+import           Database.Beam               (unAuto)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Header,
                                               Headers, JSON,
                                               NoContent (NoContent),
@@ -71,10 +75,12 @@ register arp rp =
   withLabel (Label "/register") $
   case arp of
     Authenticated PlayerSession{..} -> do
-      mPlayer <- withConn $ \conn -> liftIO . selectPlayerById conn _psId
-      case mPlayer of
-        Nothing -> throwError err401
-        Just Player{..} ->
+      ePlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn _psId
+      case ePlayer of
+        Left e -> do
+          Log.info $ "Failed authentication: " <> T.pack (show e)
+          throwError err401
+        Right Player{..} ->
           if _playerIsAdmin
             then withConn $ \conn -> liftIO (NoContent <$ insertPlayer conn rp)
             else throwError $ err401 {errBody = "Must be an admin to register a new player"}
@@ -85,9 +91,9 @@ register arp rp =
 registerFirst
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
-     , MonadIO m
      , MonadReader r m
      , MonadError ServantErr m
+     , MonadLog Label m
      )
   => CookieSettings
   -> JWTSettings
@@ -103,26 +109,54 @@ registerFirst cs jwts rp = do
 login
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
-     , MonadIO m
      , MonadReader r m
      , MonadError ServantErr m
+     , MonadLog Label m
      )
   => CookieSettings
   -> JWTSettings
   -> Login
   -> m (AuthHeaders NoContent)
-login cs jwts Login{..} = do
-  mPlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn _loginEmail
-  case mPlayer of
-    Nothing         -> throwError $ err401 { errBody = "Login failed" }
-    Just Player{..} -> _playerPassword
+login cs jwts Login{..} =
+  withLabel (Label "/login") $ do
+  let
+    loginPass = Pass . encodeUtf8 $ _loginPassword
+    throwLoginFail e = do
+      Log.info $ "Failed login: " <> T.pack (show e)
+      throwError (err401 { errBody = "Login failed" })
+  ePlayer <- withConn $ \conn -> liftIO $ selectPlayerByEmail conn _loginEmail
+  case ePlayer of
+    Left e           -> throwLoginFail e
+    Right p@Player{..} ->
+      if verifyPass' loginPass (EncryptedPass _playerPassword)
+        then acceptLogin' cs jwts p
+        else throwLoginFail ("Bad password" :: T.Text)
+
+acceptLogin'
+  :: ( MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => CookieSettings
+  -> JWTSettings
+  -> Player
+  -> m (AuthHeaders NoContent)
+acceptLogin' cs jwts Player{..} = do
+  let
+    throwNoId = do
+      Log.error $ "Player with email '" <> _playerEmail <> "' missing id"
+      throwError err500
+  pId <- maybe throwNoId pure . unAuto $ _playerId
+  mApplyCookies <- liftIO . acceptLogin cs jwts . PlayerSession $ pId
+  case mApplyCookies of
+    Nothing           -> throwError err401
+    Just applyCookies -> pure $ applyCookies NoContent
 
 addFirstPlayer
   :: ( MonadBaseControl IO m
-     , MonadIO m
      , MonadError ServantErr m
      , MonadReader r m
      , HasDbConnPool r
+     , MonadLog Label m
      )
   => CookieSettings
   -> JWTSettings
@@ -133,8 +167,4 @@ addFirstPlayer cs jwts rp = do
     playerThrow = throwError $ err500 { errBody = "User registration failed" }
   -- Force admin flag to true for first registration
   mp <- withConn $ \conn -> liftIO . insertPlayer conn $ rp {_lbrIsAdmin = Just True}
-  p <- maybe playerThrow pure mp
-  mApplyCookies <- liftIO $ acceptLogin cs jwts p
-  case mApplyCookies of
-    Nothing           -> throwError err401
-    Just applyCookies -> pure $ applyCookies NoContent
+  maybe playerThrow (acceptLogin' cs jwts) mp

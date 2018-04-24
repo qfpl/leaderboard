@@ -2,6 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
+-- There are helpers in here with gnarly types that would be inferred if we
+-- copy pasted the code into each call site.
+{-# OPTIONS_GHC -fno-warn-missing-signatures#-}
+
 module Leaderboard.Queries
   ( selectOrPersistJwk
   , selectPlayerCount
@@ -15,23 +19,21 @@ import           Control.Monad                            (void)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
                                                            Pass (..),
-                                                           encryptPassIO',
-                                                           getPass)
+                                                           encryptPassIO')
 import           Data.Aeson                               (eitherDecode')
 import           Data.Aeson.Text                          (encodeToLazyText)
-import           Data.Functor                             (($>))
 import           Data.Maybe                               (fromMaybe,
                                                            listToMaybe)
+import           Data.Text                                (Text)
 import qualified Data.Text.Encoding                       as TE
 import           Data.Text.Lazy                           (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding                  as TLE
 import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
-import           Database.Beam.Backend.SQL.SQL92          (Sql92SelectSyntax)
 import           Database.PgErrors                        (pgExceptionToError)
 import           Database.PostgreSQL.Simple               (Connection)
 
-import           Leaderboard.Schema                       (Jwk, JwkT (..),
+import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
                                                            Player, PlayerT (..),
                                                            leaderboardDb)
@@ -44,9 +46,9 @@ selectOrPersistJwk
   -> IO JWK
   -> IO (Either LeaderboardError JWK)
 selectOrPersistJwk conn newJwk = do
-  jwks <- selectJwks conn
-  case jwks of
-    Left s      -> pure . Left $ JwkDecodeError
+  eJwks <- selectJwks conn
+  case eJwks of
+    Left _      -> pure . Left $ JwkDecodeError
     Right []    -> newJwk >>= \jwk -> (jwk <$) <$> insertJwk conn newJwk
     Right [jwk] -> pure $ Right jwk
     Right jwks  -> pure . Left . MultipleJwksInDb $ jwks
@@ -83,13 +85,19 @@ selectPlayerById
   :: Connection
   -> Int
   -> IO (Either LeaderboardError Player)
-selectPlayerById conn pId = do
-  mp <- selectOne conn .
-         B.filter_ (\p -> _playerId p B.==. (B.val_ . B.Auto . Just $ pId)) .
-         B.all_ $ _leaderboardPlayers leaderboardDb
-  case mp of
-    Nothing -> pure $ Left NoResult
-    Just p  -> pure $ Right p
+selectPlayerById conn pId =
+  selectOne conn .
+    B.filter_ (\p -> _playerId p B.==. (B.val_ . B.Auto . Just $ pId)) .
+    B.all_ $ _leaderboardPlayers leaderboardDb
+
+selectPlayerByEmail
+  :: Connection
+  -> Text
+  -> IO (Either LeaderboardError Player)
+selectPlayerByEmail conn email =
+  selectOne conn .
+    B.filter_ (\p -> _playerEmail p B.==. B.val_ email) .
+    B.all_ $ _leaderboardPlayers leaderboardDb
 
 insertPlayer
   :: Connection
@@ -113,10 +121,13 @@ selectList conn query =
   B.runSelectReturningList $
   B.select query
 
-selectOne conn query =
-  withDb conn .
-  B.runSelectReturningOne $
-  B.select query
+selectOne conn query = do
+  ma <- withDb conn .
+        B.runSelectReturningOne $
+        B.select query
+  case ma of
+    Nothing -> pure $ Left NoResult
+    Just a  -> pure $ Right a
 
 countAll conn table =
   withDb conn .

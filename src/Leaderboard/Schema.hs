@@ -8,7 +8,6 @@ module Leaderboard.Schema
   )
 where
 
-import           Control.Exception           (catch)
 import           Control.Monad               (void)
 import           Database.Beam
 import           Database.Beam.Backend       (runNoReturn)
