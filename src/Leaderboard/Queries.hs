@@ -5,6 +5,8 @@
 module Leaderboard.Queries
   ( selectOrPersistJwk
   , selectPlayerCount
+  , selectPlayerById
+  , selectPlayerByEmail
   , insertPlayer
   ) where
 
@@ -31,8 +33,7 @@ import           Database.PostgreSQL.Simple               (Connection)
 
 import           Leaderboard.Schema                       (Jwk, JwkT (..),
                                                            LeaderboardDb (..),
-                                                           Player,
-                                                           PlayerT (Player),
+                                                           Player, PlayerT (..),
                                                            leaderboardDb)
 import           Leaderboard.Types                        (LeaderboardError (..),
                                                            RegisterPlayer (..))
@@ -81,7 +82,14 @@ selectPlayerCount conn =
 selectPlayerById
   :: Connection
   -> Int
-  -> IO (Either leaderboardError Player)
+  -> IO (Either LeaderboardError Player)
+selectPlayerById conn pId = do
+  mp <- selectOne conn .
+         B.filter_ (\p -> _playerId p B.==. (B.val_ . B.Auto . Just $ pId)) .
+         B.all_ $ _leaderboardPlayers leaderboardDb
+  case mp of
+    Nothing -> pure $ Left NoResult
+    Just p  -> pure $ Right p
 
 insertPlayer
   :: Connection
@@ -103,6 +111,11 @@ insertValues conn table vals =
 selectList conn query =
   withDb conn .
   B.runSelectReturningList $
+  B.select query
+
+selectOne conn query =
+  withDb conn .
+  B.runSelectReturningOne $
   B.select query
 
 countAll conn table =

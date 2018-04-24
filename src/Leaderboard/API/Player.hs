@@ -28,7 +28,9 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               SetCookie, acceptLogin)
 
 import           Leaderboard.Env             (HasDbConnPool, withConn)
-import           Leaderboard.Queries         (insertPlayer, selectPlayerCount)
+import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
+                                              selectPlayerById,
+                                              selectPlayerCount)
 import           Leaderboard.Schema          (Player, PlayerT (..))
 import           Leaderboard.Types           (Login (..), PlayerSession (..),
                                               RegisterPlayer (..))
@@ -110,7 +112,7 @@ login
   -> Login
   -> m (AuthHeaders NoContent)
 login cs jwts Login{..} = do
-  mPlayer <- withConn $ \conn -> liftIO $ selectPlayerByEmail conn _loginEmail
+  mPlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn _loginEmail
   case mPlayer of
     Nothing         -> throwError $ err401 { errBody = "Login failed" }
     Just Player{..} -> _playerPassword

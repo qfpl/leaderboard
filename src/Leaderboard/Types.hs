@@ -35,6 +35,7 @@ data LeaderboardError =
   | MultipleJwksInDb [JWK]
   | JwkDecodeError
   | DbError Text
+  | NoResult
   deriving (Eq, Show)
 
 data PostgresException =
