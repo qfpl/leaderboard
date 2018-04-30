@@ -5,6 +5,8 @@ module Leaderboard.RegistrationTests
   ) where
 
 import           Data.Text              (Text)
+import           Servant.Client         (ClientM)
+
 import           Hedgehog               (Callback (..), Command (Command), Gen,
                                          HTraversable (htraverse), Property,
                                          PropertyT, executeSequential, forAll,
@@ -15,7 +17,8 @@ import qualified Hedgehog.Range         as Range
 import           Test.Tasty             (TestTree, testGroup)
 import           Test.Tasty.Hedgehog    (testProperty)
 
-import           Leaderboard.TestClient
+import           Leaderboard.TestClient (LeaderboardClient (..),
+                                         mkLeaderboardClient)
 import           Leaderboard.Types      (RegisterPlayer (..))
 
 registrationTests :: TestTree
@@ -57,10 +60,13 @@ instance HTraversable RegFirst where
   htraverse _ (RegFirst rp) = pure (RegFirst rp)
 
 cRegFirst
-  :: Command Gen (PropertyT IO) RegFirstState
+  :: Command Gen (PropertyT ClientM) RegFirstState
 cRegFirst =
   let
     gen = const . Just . fmap RegFirst $ genRegPlayerRandomAdmin
-    --execute (RegFirst rp) =
+    execute (RegFirst rp) = lcRegisterFirst mkLeaderboardClient rp
+    callbacks =
+      [ Update $ \(RegFirstState s) (RegFirst rp) ()
+      ]
   in
     undefined
