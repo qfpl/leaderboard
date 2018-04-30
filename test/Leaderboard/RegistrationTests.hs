@@ -4,18 +4,19 @@ module Leaderboard.RegistrationTests
   ( registrationTests
   ) where
 
-import           Data.Text           (Text)
-import           Hedgehog            (Callback (..), Command (Command), Gen,
-                                      HTraversable (htraverse), Property,
-                                      PropertyT, executeSequential, forAll,
-                                      property, (===))
-import qualified Hedgehog.Gen        as Gen
-import qualified Hedgehog.Range      as Range
+import           Data.Text              (Text)
+import           Hedgehog               (Callback (..), Command (Command), Gen,
+                                         HTraversable (htraverse), Property,
+                                         PropertyT, executeSequential, forAll,
+                                         property, (===))
+import qualified Hedgehog.Gen           as Gen
+import qualified Hedgehog.Range         as Range
 
-import           Test.Tasty          (TestTree, testGroup)
-import           Test.Tasty.Hedgehog (testProperty)
+import           Test.Tasty             (TestTree, testGroup)
+import           Test.Tasty.Hedgehog    (testProperty)
 
-import           Leaderboard.Types   (RegisterPlayer (..))
+import           Leaderboard.TestClient
+import           Leaderboard.Types      (RegisterPlayer (..))
 
 registrationTests :: TestTree
 registrationTests =
@@ -59,7 +60,7 @@ cRegFirst
   :: Command Gen (PropertyT IO) RegFirstState
 cRegFirst =
   let
-    gen :: RegFirstState v -> Maybe (Gen (RegFirst v))
     gen = const . Just . fmap RegFirst $ genRegPlayerRandomAdmin
+    --execute (RegFirst rp) =
   in
     undefined

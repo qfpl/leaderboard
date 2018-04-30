@@ -5,15 +5,13 @@ module Leaderboard.Application (leaderboard) where
 
 import           Control.Monad.Log       (Logger)
 import           Control.Monad.Log.Label (Label)
-import           Data.Proxy              (Proxy (Proxy))
 import           Servant                 ((:~>), Application,
                                           Context ((:.), EmptyContext), Handler,
                                           enter, serveWithContext)
-import           Servant.Auth            (Cookie, JWT)
 import           Servant.Auth.Server     (defaultCookieSettings,
                                           defaultJWTSettings)
 
-import           Leaderboard.API         (LeaderboardAPI, leaderboardServer)
+import           Leaderboard.API         (leaderboardServer, leaderboardAPI)
 import           Leaderboard.Env         (Env, _envJWK)
 import           Leaderboard.Server      (LHandlerT, toHandler)
 
@@ -22,9 +20,8 @@ leaderboard env logger =
   let
     jwtCfg = defaultJWTSettings (_envJWK env)
     cfg = defaultCookieSettings :. jwtCfg :. EmptyContext
-    api = Proxy :: Proxy (LeaderboardAPI '[JWT, Cookie])
     toHandler' :: LHandlerT Env Handler :~> Handler
     toHandler' = toHandler env logger
     server = leaderboardServer defaultCookieSettings jwtCfg
   in
-    serveWithContext api cfg $ enter toHandler' server
+    serveWithContext leaderboardAPI cfg $ enter toHandler' server

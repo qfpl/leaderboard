@@ -14,5 +14,10 @@ else nixpkgs.haskell.packages.${compiler}).override {
     beam-migrate =
       import ./beam-migrate.nix { haskellPackages = self; inherit beam; };
     monad-log = self.callPackage monad-log {};
+    # servant-auth-client is too new on 17.09
+    servant-auth-client =
+      if self.servant.version < "0.13"
+      then self.callPackage ./servant-auth-client-0.3.nix {}
+      else self.servant-auth-client;
   };
 }

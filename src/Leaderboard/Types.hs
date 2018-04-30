@@ -1,11 +1,13 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.Types where
 
 import           Crypto.JOSE                (JWK)
-import           Data.Aeson                 (FromJSON, ToJSON, parseJSON,
-                                             withObject, (.:))
+import           Data.Aeson                 (FromJSON, ToJSON, object,
+                                             parseJSON, toJSON, withObject,
+                                             (.:), (.=))
 import           Data.Text                  (Text)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
@@ -31,6 +33,15 @@ instance FromJSON RegisterPlayer where
       v .: "password" <*>
       v .: "isAdmin"
 
+instance ToJSON RegisterPlayer where
+  toJSON LeaderboardRegistration{..} =
+    object
+    [ "email" .= _lbrEmail
+    , "name" .= _lbrName
+    , "password" .= _lbrPassword
+    , "isAdmin" .= _lbrIsAdmin
+    ]
+
 data LeaderboardError =
     ServantError ServantErr
   | PostgresError PostgresException
@@ -52,6 +63,7 @@ data Login
     }
     deriving Generic
 instance FromJSON Login
+instance ToJSON Login
 
 newtype PlayerSession
   = PlayerSession { _psId :: Int }
