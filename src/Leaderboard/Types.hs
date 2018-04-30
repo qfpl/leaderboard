@@ -12,6 +12,7 @@ import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
 import           Servant.Auth.Server        (FromJWT, ToJWT)
 
+-- TODO ajmccluskey: newtype these!
 data RegisterPlayer
   = LeaderboardRegistration
     { _lbrEmail    :: Text
@@ -19,7 +20,7 @@ data RegisterPlayer
     , _lbrPassword :: Text
     , _lbrIsAdmin  :: Maybe Bool
     }
-  deriving Generic
+  deriving (Eq, Generic, Show)
 
 instance FromJSON RegisterPlayer where
   parseJSON =
