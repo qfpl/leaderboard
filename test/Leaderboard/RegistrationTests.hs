@@ -28,10 +28,12 @@ import           Leaderboard.TestClient    (LeaderboardClient (..),
                                             mkLeaderboardClient)
 import           Leaderboard.Types         (RegisterPlayer (..))
 
-registrationTests :: TestTree
-registrationTests =
+registrationTests
+  :: BaseUrl
+  -> TestTree
+registrationTests url =
   testGroup "registration" [
-    -- registerFirstTests
+    testProperty "register-first is once only" $ propRegFirst url
   ]
 
 genNonEmptyUnicode
@@ -86,11 +88,12 @@ cRegFirst env =
     ]
 
 propRegFirst
-  :: Property
-propRegFirst =
+  :: BaseUrl
+  -> Property
+propRegFirst url =
   property $ do
     tlsManager <- liftIO newTlsManager
-    let env = ClientEnv tlsManager $ BaseUrl Https "localhost" 7645 ""
+    let env = ClientEnv tlsManager url
     commands <- forAll $
       Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
     executeSequential initialState commands

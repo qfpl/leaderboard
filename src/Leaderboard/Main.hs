@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Leaderboard.Main where
 
+import           Control.Lens                (Lens', lens, makeLenses, (%~),
+                                              (&), (.~), (^.))
 import           Control.Monad.Log           (LogType (..), levelDebug,
                                               makeDefaultLogger,
                                               simpleTimeFormat)
@@ -11,8 +13,8 @@ import           Control.Retry               (exponentialBackoff, limitRetries,
                                               recoverAll)
 import           Data.Pool                   (Pool, createPool, withResource)
 import           Data.Semigroup              ((<>))
-import           Data.Word                   (Word16)
-import           Database.PostgreSQL.Simple
+import           Database.PostgreSQL.Simple  (ConnectInfo (ConnectInfo, connectPassword),
+                                              Connection, close, connect)
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
 import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import           Options.Applicative
@@ -24,29 +26,35 @@ import           Leaderboard.Env             (Env (Env), genJwk)
 import           Leaderboard.Queries         (selectOrPersistJwk)
 import           Leaderboard.Schema          (createSchema)
 
-data ApplicationOptions
-  = ApplicationOptions
-  { aoDbHost  :: String
-  , aoDbPort  :: Word16
-  , aoDbUser  :: String
-  , aoDbName  :: String
-  , aoPort    :: Int
-  , aoCommand :: Command
-  }
-
 data Command
   = RunApp
   | MigrateDb
 
+data ApplicationOptions
+  = ApplicationOptions
+  { _aoDbConnInfo :: ConnectInfo
+  , _aoPort       :: Int
+  , _aoCommand    :: Command
+  }
+makeLenses ''ApplicationOptions
+
+aoDbPass
+  :: Lens' ApplicationOptions String
+aoDbPass =
+  lens
+    (connectPassword . (^. aoDbConnInfo))
+    (\ao pass ->
+        ao & aoDbConnInfo %~ \ci -> ci { connectPassword = pass })
+
 applicationOptionsParser :: Parser ApplicationOptions
 applicationOptionsParser =
-  ApplicationOptions <$>
-    dbHost <*> dbPort <*> dbUser <*> dbName <*> port <*> migrateDb
+  ApplicationOptions <$> ci <*> port <*> migrateDb
   where
     dbHost = strOption (long "db_host" <> help "Database host name" <> metavar "HOST")
     dbPort = fmap read (strOption $ long "db_port" <> help "Database port" <> metavar "DB_PORT")
     dbUser = strOption (long "db_user" <> help "Database user" <> metavar "DB_USER")
     dbName = strOption (long "db_name" <> help "Database name" <> metavar "DB_NAME")
+    ci = ConnectInfo <$> dbHost <*> dbPort <*> dbUser <*> pure "" <*> dbName
     port = fmap read (strOption $ long "port" <> help "Webapp port" <> metavar "PORT")
     migrateDb = flag RunApp MigrateDb (long "migrate" <> help "Migrate/initialise the database")
 
@@ -59,14 +67,15 @@ parserInfo =
 main :: IO ()
 main = do
   putStrLn "leaderboard started"
-  ao@ApplicationOptions{..} <- execParser parserInfo
+  ao' <- execParser parserInfo
   password <- getEnv "DBPASS"
-  pool <- mkConnectionPool ao password
-  case aoCommand of
+  let ao = ao' & aoDbPass .~ password
+  pool <- mkConnectionPool $ ao ^. aoDbConnInfo
+  case ao ^. aoCommand of
     MigrateDb ->
       withResource pool createSchema >>=
         either print (const $ putStrLn "Migrated successfully")
-    RunApp    -> runApp pool aoPort
+    RunApp    -> runApp pool $ ao ^. aoPort
 
 runApp
   :: Pool Connection
@@ -86,10 +95,9 @@ runApp pool port = do
   either exitFail doIt jwk
 
 mkConnectionPool
-  :: ApplicationOptions
-  -> String
+  :: ConnectInfo
   -> IO (Pool Connection)
-mkConnectionPool ApplicationOptions{..} pass =
+mkConnectionPool ci =
   createPool
     retryingConnect
     close
@@ -101,7 +109,6 @@ mkConnectionPool ApplicationOptions{..} pass =
     numStripes = 1
     anHourInSeconds = 3600
     maxOpenConnections = 20
-    ci = ConnectInfo aoDbHost aoDbPort aoDbUser pass aoDbName
     retryingConnect =
       recoverAll
         (exponentialBackoff 200 <> limitRetries 10)

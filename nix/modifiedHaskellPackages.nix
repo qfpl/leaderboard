@@ -18,6 +18,8 @@ else nixpkgs.haskell.packages.${compiler}).override {
     servant-auth-client =
       if self.servant.version < "0.13"
       then self.callPackage ./servant-auth-client-0.3.nix {}
-      else self.servant-auth-client;
+      else super.servant-auth-client;
+    # tests shell out to postgres exes that aren't on the path
+    tmp-postgres = nixpkgs.haskell.lib.dontCheck super.tmp-postgres;
   };
 }
