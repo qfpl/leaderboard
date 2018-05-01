@@ -74,6 +74,8 @@ test-suite leaderboard-tests
   main-is:             Test.hs
   build-depends:       base >=4.9 && <4.11
                      , hedgehog >=0.5 && <0.6
+                     , http-types >=0.8.6 && <0.11
+                     , http-client-tls >=0.3.5.1 && <0.4
                      , leaderboard
                      , servant >=0.11 && <0.14
                      , servant-auth-client >=0.3 && <0.4
@@ -81,4 +83,5 @@ test-suite leaderboard-tests
                      , text >=1.2.2.2 && <1.3
                      , tasty >=0.11 && <1.1
                      , tasty-hedgehog >=0.1 && <0.3
+                     , transformers >=0.2 && <0.6
   default-language:    Haskell2010

@@ -1,25 +1,32 @@
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE KindSignatures  #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Leaderboard.RegistrationTests
   ( registrationTests
   ) where
 
-import           Data.Text              (Text)
-import           Servant.Client         (ClientM)
+import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.Trans.Class (lift)
+import           Data.Text                 (Text)
+import           Network.HTTP.Client.TLS   (newTlsManager)
+import           Network.HTTP.Types.Status (forbidden403)
+import           Servant.Client            (ClientEnv (ClientEnv), ClientM,
+                                            ServantError (..), runClientM, BaseUrl (BaseUrl), Scheme (Https))
 
-import           Hedgehog               (Callback (..), Command (Command), Gen,
-                                         HTraversable (htraverse), Property,
-                                         PropertyT, executeSequential, forAll,
-                                         property, (===))
-import qualified Hedgehog.Gen           as Gen
-import qualified Hedgehog.Range         as Range
+import           Hedgehog                  (Callback (..), Command (Command),
+                                            Gen, HTraversable (htraverse),
+                                            Property, PropertyT,
+                                            executeSequential, forAll, property,
+                                            (===))
+import qualified Hedgehog.Gen              as Gen
+import qualified Hedgehog.Range            as Range
 
-import           Test.Tasty             (TestTree, testGroup)
-import           Test.Tasty.Hedgehog    (testProperty)
+import           Test.Tasty                (TestTree, testGroup)
+import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.TestClient (LeaderboardClient (..),
-                                         mkLeaderboardClient)
-import           Leaderboard.Types      (RegisterPlayer (..))
+import           Leaderboard.TestClient    (LeaderboardClient (..),
+                                            mkLeaderboardClient)
+import           Leaderboard.Types         (RegisterPlayer (..))
 
 registrationTests :: TestTree
 registrationTests =
@@ -60,13 +67,30 @@ instance HTraversable RegFirst where
   htraverse _ (RegFirst rp) = pure (RegFirst rp)
 
 cRegFirst
-  :: Command Gen (PropertyT ClientM) RegFirstState
-cRegFirst =
+  :: ClientEnv
+  -> Command Gen (PropertyT IO) RegFirstState
+cRegFirst env =
   let
     gen = const . Just . fmap RegFirst $ genRegPlayerRandomAdmin
-    execute (RegFirst rp) = lcRegisterFirst mkLeaderboardClient rp
-    callbacks =
-      [ Update $ \(RegFirstState s) (RegFirst rp) ()
-      ]
+    execute (RegFirst rp) = lift . flip runClientM env $ lcRegisterFirst mkLeaderboardClient rp
   in
-    undefined
+    Command gen execute [
+      Update $ \_in _c _out -> RegFirstState True
+    , Ensure $ \(RegFirstState sOld) (RegFirstState sNew) _input r ->
+        case r of
+          Right _ -> sOld === False >> sNew === True
+          Left FailureResponse{..} ->
+            sOld === True
+            >> sNew === True
+            >> responseStatus === forbidden403
+    ]
+
+propRegFirst
+  :: Property
+propRegFirst =
+  property $ do
+    tlsManager <- liftIO newTlsManager
+    let env = ClientEnv tlsManager $ BaseUrl Https "localhost" 7645 ""
+    commands <- forAll $
+      Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
+    executeSequential initialState commands
