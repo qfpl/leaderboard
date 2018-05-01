@@ -62,16 +62,6 @@ allTheTests url =
   [ registrationTests url
   ]
 
-startDb
-  :: IO ()
-startDb =
-  undefined
-
-stopDb
-  :: IO ()
-stopDb =
-  undefined
-
 withDb
   :: (DB -> IO a)
   -> IO a
