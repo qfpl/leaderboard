@@ -16,8 +16,13 @@ let
     else
       nixpkgs;
 
+  addToBuildDepends = (drv: additions:
+    pkgs.haskell.lib.overrideCabal drv (old: {
+      buildDepends = (old.buildDepends or []) ++ additions;
+    })
+  );
   haskellPackages =
-    import ./modifiedHaskellPackages.nix { nixpkgs = pkgs; inherit compiler; };
+    import ./modifiedHaskellPackages.nix { nixpkgs = pkgs; inherit compiler addToBuildDepends; };
   leaderboard = haskellPackages.callPackage ../leaderboard.nix {};
 in
-  {inherit pkgs haskellPackages leaderboard;}
+  {inherit pkgs haskellPackages leaderboard addToBuildDepends;}
