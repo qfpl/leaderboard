@@ -10,7 +10,7 @@ import           Data.ByteString               (ByteString)
 import           Data.ByteString.Char8         (pack)
 import           Data.Semigroup                ((<>))
 import           Database.Postgres.Temp        (DB (..), StartError,
-                                                startLocalhost, stop)
+                                                stop, startAndLogToTmp)
 import           Database.PostgreSQL.Simple    (ConnectInfo (..))
 import           Servant.Client                (BaseUrl (BaseUrl),
                                                 Scheme (Https))
@@ -19,7 +19,7 @@ import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
 
 import           Leaderboard.Main              (ApplicationOptions (..),
-                                                Command (RunApp),
+                                                Command (..),
                                                 DbConnInfo (DbConnString),
                                                 doTheLeaderboard)
 import           Leaderboard.RegistrationTests (registrationTests)
@@ -64,7 +64,7 @@ withDb
   -> IO a
 withDb f =
   bracket
-    (startLocalhost [])
+    (startAndLogToTmp [])
     (splode stop)
     (splode f)
   where
@@ -78,4 +78,10 @@ withLeaderboard
   -> IO a
   -> IO a
 withLeaderboard ao =
-  bracket (forkIO $ doTheLeaderboard ao) (`throwTo` Shutdown) . const
+  let
+    aoMigrate = ao { aoCommand = MigrateDb }
+    setupLeaderboard = do
+      doTheLeaderboard aoMigrate
+      doTheLeaderboard ao
+  in
+    bracket (forkIO setupLeaderboard) (`throwTo` Shutdown) . const

@@ -1,21 +1,22 @@
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.Main where
 
-import           Control.Monad.Log           (LogType (..), levelDebug,
-                                              makeDefaultLogger,
-                                              simpleTimeFormat)
+import           Control.Monad.IO.Class      (liftIO)
+import           Control.Monad.Log           (LogT, askLogger, runLogT)
+import qualified Control.Monad.Log           as Log
 import           Control.Monad.Log.Label     (Label (Label))
 import           Control.Retry               (exponentialBackoff, limitRetries,
                                               recoverAll)
 import           Data.ByteString             (ByteString)
 import           Data.Pool                   (Pool, createPool, withResource)
 import           Data.Semigroup              ((<>))
+import           Data.Text                   (pack)
 import           Data.Word                   (Word16)
-import           Database.PostgreSQL.Simple  (ConnectInfo (..),
-                                              Connection, close, connect,
-                                              connectPostgreSQL)
+import           Database.PostgreSQL.Simple  (ConnectInfo (..), Connection,
+                                              close, connect, connectPostgreSQL)
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
 import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import           Options.Applicative
@@ -79,17 +80,20 @@ doTheLeaderboard
   :: ApplicationOptions
   -> IO ()
 doTheLeaderboard ApplicationOptions{..} = do
-  let
-    conn =
-      case aoDbConnInfo of
-        DbConnRecord ci -> getEnv "DBPASS" >>= connect . addDbPass ci
-        DbConnString s  -> connectPostgreSQL s
-  pool <- mkConnectionPool conn
-  case aoCommand of
-    MigrateDb ->
-      withResource pool createSchema >>=
-        either print (const $ putStrLn "Migrated successfully")
-    RunApp    -> runApp pool aoPort
+  logger <-
+    Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelDebug (Label "unlabeled")
+  flip runLogT logger $ do
+    let
+      conn =
+        case aoDbConnInfo of
+          DbConnRecord ci -> getEnv "DBPASS" >>= connect . addDbPass ci
+          DbConnString s  -> connectPostgreSQL s
+    pool <- mkConnectionPool conn
+    case aoCommand of
+      MigrateDb -> liftIO $
+        withResource pool createSchema >>=
+          either print (const $ putStrLn "Migrated successfully")
+      RunApp    -> runApp pool aoPort
 
 addDbPass
   :: ConnectInfoSansPass
@@ -102,36 +106,40 @@ addDbPass ConnectInfoSansPass{..} pass =
 runApp
   :: Pool Connection
   -> Int
-  -> IO ()
+  -> LogT Label IO ()
 runApp pool port = do
-  logger <-
-    makeDefaultLogger simpleTimeFormat (LogStdout 4096) levelDebug (Label "unlabeled")
-  jwk <- withResource pool (`selectOrPersistJwk` genJwk)
-  let
-    tlsOpts = tlsSettings "cert.pem" "key.pem"
-    warpOpts = setPort port defaultSettings
-    doIt jwk' = runTLS tlsOpts warpOpts $ leaderboard (Env pool jwk') logger
-    exitFail e = do
-      putStrLn $ "Error with JWK: " <> show e
-      exitWith . ExitFailure $ 1
-  either exitFail doIt jwk
+    logger <- askLogger
+    Log.info "Creating/retrieving JWK"
+    jwk <- liftIO $ withResource pool (`selectOrPersistJwk` genJwk)
+    let
+      tlsOpts = tlsSettings "cert.pem" "key.pem"
+      warpOpts = setPort port defaultSettings
+      doIt jwk' = liftIO . runTLS tlsOpts warpOpts $ leaderboard (Env pool jwk') logger
+      exitFail e = do
+        Log.error $ "Error with JWK: " <> (pack . show $ e)
+        liftIO . exitWith . ExitFailure $ 1
+    Log.info $ "Starting app on port " <> (pack . show $ port)
+    either exitFail doIt jwk
 
 mkConnectionPool
   :: IO Connection
-  -> IO (Pool Connection)
-mkConnectionPool ci =
-  createPool
-    retryingConnect
-    close
-    numStripes
-    anHourInSeconds
-    maxOpenConnections
+  -> LogT env IO (Pool Connection)
+mkConnectionPool ci = do
+  logger <- askLogger
+  liftIO $
+    createPool
+      (retryingConnect logger)
+      close
+      numStripes
+      anHourInSeconds
+      maxOpenConnections
   where
     -- docs says one stripe is enough unless in a high perf environment
     numStripes = 1
     anHourInSeconds = 3600
     maxOpenConnections = 20
-    retryingConnect =
+    retryingConnect l =
       recoverAll
         (exponentialBackoff 200 <> limitRetries 10)
-        (\_ -> putStrLn "Attempting to connect to database..." *> ci)
+        (\_ -> runLogT (Log.info "Attempting to connect to database...") l *> liftIO ci)
+
