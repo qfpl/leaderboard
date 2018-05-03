@@ -10,14 +10,16 @@ import           Control.Monad.Trans.Class (lift)
 import           Data.Text                 (Text)
 import           Network.HTTP.Client.TLS   (newTlsManager)
 import           Network.HTTP.Types.Status (forbidden403)
-import           Servant.Client            (ClientEnv (ClientEnv), ClientM,
-                                            ServantError (..), runClientM, BaseUrl (BaseUrl), Scheme (Https))
+import           Servant.Client            (BaseUrl (BaseUrl),
+                                            ClientEnv (ClientEnv), ClientM,
+                                            Scheme (Https), ServantError (..),
+                                            runClientM)
 
 import           Hedgehog                  (Callback (..), Command (Command),
                                             Gen, HTraversable (htraverse),
-                                            Property, PropertyT,
-                                            executeSequential, forAll, property,
-                                            (===))
+                                            Property, PropertyT, annotateShow,
+                                            executeSequential, failure, forAll,
+                                            property, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -85,6 +87,7 @@ cRegFirst env =
             sOld === True
             >> sNew === True
             >> responseStatus === forbidden403
+          Left e -> annotateShow e >> failure
     ]
 
 propRegFirst
