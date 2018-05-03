@@ -1,9 +1,10 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
+{ nixpkgs ? "default", compiler ? "ghc802" }:
 let
-  haskellPackages =
-    import ./nix/modifiedHaskellPackages.nix { inherit nixpkgs compiler; };
+  env = import ./nix/env.nix { inherit nixpkgs compiler; };
+  leaderboard =
+    env.pkgs.haskell.lib.overrideCabal
+      env.leaderboard
+      (old: {
+        buildDepends = (old.buildDepends or []) ++ [ env.pkgs.postgresql ]; });
 in
-nixpkgs.haskell.lib.justStaticExecutables
-  (haskellPackages.callPackage
-    ./leaderboard.nix
-    { })
+  env.pkgs.haskell.lib.justStaticExecutables leaderboard

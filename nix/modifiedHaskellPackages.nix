@@ -1,4 +1,4 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler }:
+{ nixpkgs, compiler }:
 let
   beam = import ./beam.nix { inherit nixpkgs; };
 in
@@ -9,7 +9,7 @@ in
     beam-postgres =
       import ./beam-postgres.nix { haskellPackages = self; inherit beam; };
     beam-migrate =
-      import ./beam-migrate.nix { haskellPackages = self; inherit beam; inherit nixpkgs; };
+      import ./beam-migrate.nix { haskellPackages = self; inherit beam; };
     monad-log = self.callPackage ./monad-log.nix {};
     # servant-auth-client in nixpkgs (17.09 and 18.03 at least) is too new for servant-0.11
     servant-auth-client =
