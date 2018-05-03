@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE TemplateHaskell       #-}
 
 module Leaderboard.Main where
 
@@ -33,7 +32,7 @@ data Command
   | MigrateDb
 
 data ConnectInfoSansPass
-  =ConnectInfoSansPass
+  = ConnectInfoSansPass
   { connectHost     :: String
   , connectPort     :: Word16
   , connectUser     :: String
@@ -73,13 +72,17 @@ parserInfo =
 
 main :: IO ()
 main = do
-  putStrLn "leaderboard started"
-  ApplicationOptions{..} <- execParser parserInfo
-  password <- getEnv "DBPASS"
+  ao <- execParser parserInfo
+  doTheLeaderboard ao
+
+doTheLeaderboard
+  :: ApplicationOptions
+  -> IO ()
+doTheLeaderboard ApplicationOptions{..} = do
   let
     conn =
       case aoDbConnInfo of
-        DbConnRecord ci -> connect . addDbPass password $ ci
+        DbConnRecord ci -> getEnv "DBPASS" >>= connect . addDbPass ci
         DbConnString s  -> connectPostgreSQL s
   pool <- mkConnectionPool conn
   case aoCommand of
@@ -89,10 +92,10 @@ main = do
     RunApp    -> runApp pool aoPort
 
 addDbPass
-  :: String
-  -> ConnectInfoSansPass
+  :: ConnectInfoSansPass
+  -> String
   -> ConnectInfo
-addDbPass pass ConnectInfoSansPass{..} =
+addDbPass ConnectInfoSansPass{..} pass =
   let connectPassword = pass
    in ConnectInfo{..}
 
