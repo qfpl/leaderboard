@@ -86,6 +86,7 @@ parserInfo =
 main :: IO ()
 main = do
   co <- execParser parserInfo
+  -- TODO ajmccluskey: we might not need a pass, so use the maybe version of this and blank pass on Nothing
   password <- getEnv "DBPASS"
   doTheLeaderboard $ fromCmdLineOpts co password
 
