@@ -1,6 +1,9 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 module Leaderboard.Main where
 
@@ -10,13 +13,12 @@ import qualified Control.Monad.Log           as Log
 import           Control.Monad.Log.Label     (Label (Label))
 import           Control.Retry               (exponentialBackoff, limitRetries,
                                               recoverAll)
-import           Data.ByteString             (ByteString)
 import           Data.Pool                   (Pool, createPool, withResource)
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (pack)
 import           Data.Word                   (Word16)
 import           Database.PostgreSQL.Simple  (ConnectInfo (..), Connection,
-                                              close, connect, connectPostgreSQL)
+                                              close, connect)
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
 import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 import           Options.Applicative
@@ -41,40 +43,51 @@ data ConnectInfoSansPass
   }
   deriving (Eq, Show)
 
-data DbConnInfo
-  = DbConnRecord ConnectInfoSansPass
-  | DbConnString ByteString
-  deriving (Eq, Show)
+data CommandLineOptions
+  = CommandLineOptions
+  { dbConnInfoSansPass :: ConnectInfoSansPass
+  , port               :: Int
+  , command            :: Command
+  }
 
 data ApplicationOptions
   = ApplicationOptions
-  { aoDbConnInfo :: DbConnInfo
-  , aoPort       :: Int
-  , aoCommand    :: Command
+  { dbConnInfo :: ConnectInfo
+  , port       :: Int
+  , command    :: Command
   }
 
-applicationOptionsParser :: Parser ApplicationOptions
-applicationOptionsParser =
-  ApplicationOptions . DbConnRecord <$> ci <*> port <*> migrateDb
+fromCmdLineOpts
+  :: CommandLineOptions
+  -> String
+  -> ApplicationOptions
+fromCmdLineOpts CommandLineOptions{..} pass =
+  let dbConnInfo = addDbPass dbConnInfoSansPass pass
+   in ApplicationOptions{..}
+
+commandLineOptionsParser :: Parser CommandLineOptions
+commandLineOptionsParser =
+  CommandLineOptions <$> cisp <*> port <*> migrateDb
   where
     dbHost = strOption (long "db_host" <> help "Database host name" <> metavar "HOST")
     dbPort = fmap read (strOption $ long "db_port" <> help "Database port" <> metavar "DB_PORT")
     dbUser = strOption (long "db_user" <> help "Database user" <> metavar "DB_USER")
     dbName = strOption (long "db_name" <> help "Database name" <> metavar "DB_NAME")
-    ci = ConnectInfoSansPass <$> dbHost <*> dbPort <*> dbUser <*> dbName
+    cisp = ConnectInfoSansPass <$> dbHost <*> dbPort <*> dbUser <*> dbName
     port = fmap read (strOption $ long "port" <> help "Webapp port" <> metavar "PORT")
     migrateDb = flag RunApp MigrateDb (long "migrate" <> help "Migrate/initialise the database")
 
-parserInfo :: ParserInfo ApplicationOptions
+parserInfo :: ParserInfo CommandLineOptions
 parserInfo =
   info
-    (applicationOptionsParser <**> helper)
+    (commandLineOptionsParser <**> helper)
     (fullDesc <> progDesc "Run the leaderboard webapp")
 
 main :: IO ()
 main = do
-  ao <- execParser parserInfo
-  doTheLeaderboard ao
+  co <- execParser parserInfo
+  password <- getEnv "DBPASS"
+  doTheLeaderboard $ fromCmdLineOpts co password
 
 doTheLeaderboard
   :: ApplicationOptions
@@ -83,17 +96,13 @@ doTheLeaderboard ApplicationOptions{..} = do
   logger <-
     Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelDebug (Label "unlabeled")
   flip runLogT logger $ do
-    let
-      conn =
-        case aoDbConnInfo of
-          DbConnRecord ci -> getEnv "DBPASS" >>= connect . addDbPass ci
-          DbConnString s  -> connectPostgreSQL s
+    let conn = connect dbConnInfo
     pool <- mkConnectionPool conn
-    case aoCommand of
+    case command of
       MigrateDb -> liftIO $
         withResource pool createSchema >>=
           either print (const $ putStrLn "Migrated successfully")
-      RunApp    -> runApp pool aoPort
+      RunApp    -> runApp pool port
 
 addDbPass
   :: ConnectInfoSansPass
