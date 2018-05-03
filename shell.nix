@@ -1,23 +1,17 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "default" }:
+{ nixpkgs ? "default", compiler ? "ghc802" }:
 let
-
-  inherit (nixpkgs) pkgs;
-
-  haskellPackages =
-    import ./nix/modifiedHaskellPackages.nix { inherit nixpkgs compiler; };
-
+  env = import ./nix/env.nix {inherit nixpkgs compiler; };
   drv =
-    pkgs.haskell.lib.overrideCabal
-      (haskellPackages.callPackage ./leaderboard.nix {})
+    env.pkgs.haskell.lib.overrideCabal
+      env.leaderboard
       (drv: {
         buildDepends = (drv.buildDepends or []) ++
-          [ (haskellPackages.hoogleLocal {
+          [ (env.haskellPackages.hoogleLocal {
               packages =
                 drv.libraryHaskellDepends ++
                 drv.executableHaskellDepends;
               })
           ];
       });
-
 in
-  if pkgs.lib.inNixShell then drv.env else drv
+  if env.pkgs.lib.inNixShell then drv.env else drv
