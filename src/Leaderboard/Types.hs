@@ -1,9 +1,11 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Leaderboard.Types where
 
+import           Control.Lens               (makeLenses, Lens', lens)
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, ToJSON, object,
                                              parseJSON, toJSON, withObject,
@@ -13,6 +15,27 @@ import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
 import           Servant.Auth.Server        (FromJWT, ToJWT)
+
+data Command
+  = RunApp
+  | MigrateDb
+  deriving (Eq, Show)
+
+data ApplicationOptions
+  = ApplicationOptions
+  { _dbConnInfo :: Pg.ConnectInfo
+  , _port       :: Int
+  , _command    :: Command
+  }
+  deriving (Eq, Show)
+makeLenses ''ApplicationOptions
+
+_connectDatabase
+ :: Lens' Pg.ConnectInfo String
+_connectDatabase =
+  lens
+    Pg.connectDatabase
+    (\ci name -> ci { Pg.connectDatabase = name })
 
 -- TODO ajmccluskey: newtype these!
 data RegisterPlayer

@@ -20,7 +20,6 @@ import           Test.Tasty                    (TestTree, defaultMain,
 
 import           Leaderboard.Main              (ApplicationOptions (..),
                                                 Command (..),
-                                                DbConnInfo (DbConnString),
                                                 doTheLeaderboard)
 import           Leaderboard.RegistrationTests (registrationTests)
 
@@ -33,12 +32,6 @@ data DbInitError =
   deriving (Show)
 instance Exception DbInitError
 
-appOptions
-  :: ByteString
-  -> ApplicationOptions
-appOptions cs =
-  ApplicationOptions (DbConnString cs) 7645 RunApp
-
 host :: String
 host = "localhost"
 
@@ -46,17 +39,17 @@ main :: IO ()
 main =
   withDb $ \DB{..} -> do
   let
-    cs = pack connectionString
-    ao@ApplicationOptions{..} = appOptions cs
-    url = BaseUrl Https host aoPort ""
-  withLeaderboard ao $ defaultMain (allTheTests url)
+    ao@ApplicationOptions{..} = ApplicationOptions connectionInfo 7645 RunApp
+    url = BaseUrl Https host port ""
+  withLeaderboard ao $ defaultMain (allTheTests dbConnInfo url)
 
 allTheTests
-  :: BaseUrl
+  :: ConnectInfo
+  -> BaseUrl
   -> TestTree
-allTheTests url =
+allTheTests ci url =
   testGroup "leaderboard"
-  [ registrationTests url
+  [ registrationTests ci url
   ]
 
 withDb
@@ -79,7 +72,7 @@ withLeaderboard
   -> IO a
 withLeaderboard ao =
   let
-    aoMigrate = ao { aoCommand = MigrateDb }
+    aoMigrate = ao { command = MigrateDb }
     setupLeaderboard = do
       doTheLeaderboard aoMigrate
       doTheLeaderboard ao

@@ -5,38 +5,57 @@ module Leaderboard.RegistrationTests
   ( registrationTests
   ) where
 
-import           Control.Monad.IO.Class    (liftIO)
-import           Control.Monad.Trans.Class (lift)
-import           Data.Text                 (Text)
-import           Network.HTTP.Client.TLS   (newTlsManager)
-import           Network.HTTP.Types.Status (forbidden403)
-import           Servant.Client            (BaseUrl (BaseUrl),
-                                            ClientEnv (ClientEnv), ClientM,
-                                            Scheme (Https), ServantError (..),
-                                            runClientM)
+import           Control.Lens               ((&), (.~))
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Trans.Class  (lift)
+import           Data.Text                  (Text)
+import           Database.PostgreSQL.Simple (ConnectInfo (..))
+import           Network.HTTP.Client.TLS    (newTlsManager)
+import           Network.HTTP.Types.Status  (forbidden403)
+import           Servant.Client             (BaseUrl (BaseUrl),
+                                             ClientEnv (ClientEnv), ClientM,
+                                             Scheme (Https), ServantError (..),
+                                             runClientM)
 
-import           Hedgehog                  (Callback (..), Command (Command),
-                                            Gen, HTraversable (htraverse),
-                                            Property, PropertyT, annotateShow,
-                                            executeSequential, failure, forAll,
-                                            property, (===))
-import qualified Hedgehog.Gen              as Gen
-import qualified Hedgehog.Range            as Range
+import           Hedgehog                   (Callback (..), Command (Command),
+                                             Gen, HTraversable (htraverse),
+                                             Property, PropertyT, annotateShow,
+                                             executeSequential, failure, forAll,
+                                             property, (===))
+import qualified Hedgehog.Gen               as Gen
+import qualified Hedgehog.Range             as Range
 
-import           Test.Tasty                (TestTree, testGroup)
-import           Test.Tasty.Hedgehog       (testProperty)
+import           Test.Tasty                 (TestName, TestTree, testGroup)
+import           Test.Tasty.Hedgehog        (testProperty)
 
-import           Leaderboard.TestClient    (LeaderboardClient (..),
-                                            mkLeaderboardClient)
-import           Leaderboard.Types         (RegisterPlayer (..))
+import           Leaderboard.TestClient     (LeaderboardClient (..),
+                                             mkLeaderboardClient)
+import           Leaderboard.TestServer     (withLeaderboard)
+import           Leaderboard.Types          (ApplicationOptions (..),
+                                             RegisterPlayer (..), dbConnInfo,
+                                             _connectDatabase)
 
 registrationTests
-  :: BaseUrl
+  :: ApplicationOptions
   -> TestTree
-registrationTests url =
-  testGroup "registration" [
-    testProperty "register-first is once only" $ propRegFirst url
-  ]
+registrationTests ao =
+  let
+    runTest' = runTest ao
+  in
+    testGroup "registration" [
+      runTest' "register-first" propRegFirst
+    ]
+
+runTest
+  :: ApplicationOptions
+  -> TestName
+  -> (ClientEnv -> PropertyT IO ())
+  -> TestTree
+runTest ao name f =
+  testProperty name . property $ do
+    dbName <- forAll $ Gen.string (Range.constant 10 10) Gen.alpha
+    let ao' = ao & dbConnInfo . _connectDatabase .~ dbName
+    withLeaderboard ao' f
 
 genNonEmptyUnicode
   :: Gen Text
@@ -91,12 +110,9 @@ cRegFirst env =
     ]
 
 propRegFirst
-  :: BaseUrl
-  -> Property
-propRegFirst url =
-  property $ do
-    tlsManager <- liftIO newTlsManager
-    let env = ClientEnv tlsManager url
-    commands <- forAll $
-      Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
-    executeSequential initialState commands
+  :: ClientEnv
+  -> PropertyT IO ()
+propRegFirst env = do
+  commands <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
+  executeSequential initialState commands

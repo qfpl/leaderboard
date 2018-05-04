@@ -21,7 +21,10 @@ import           Database.PostgreSQL.Simple  (ConnectInfo (..), Connection,
                                               close, connect)
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
 import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
-import           Options.Applicative
+import           Options.Applicative         (Parser, ParserInfo, flag,
+                                              fullDesc, help, helper, info,
+                                              long, metavar, progDesc,
+                                              strOption, (<**>), execParser)
 import           System.Environment
 import           System.Exit                 (ExitCode (ExitFailure), exitWith)
 
@@ -29,10 +32,8 @@ import           Leaderboard.Application     (leaderboard)
 import           Leaderboard.Env             (Env (Env), genJwk)
 import           Leaderboard.Queries         (selectOrPersistJwk)
 import           Leaderboard.Schema          (createSchema)
-
-data Command
-  = RunApp
-  | MigrateDb
+import           Leaderboard.Types           (ApplicationOptions (..),
+                                              Command (..))
 
 data ConnectInfoSansPass
   = ConnectInfoSansPass
@@ -45,16 +46,9 @@ data ConnectInfoSansPass
 
 data CommandLineOptions
   = CommandLineOptions
-  { dbConnInfoSansPass :: ConnectInfoSansPass
-  , port               :: Int
-  , command            :: Command
-  }
-
-data ApplicationOptions
-  = ApplicationOptions
-  { dbConnInfo :: ConnectInfo
-  , port       :: Int
-  , command    :: Command
+  { _dbConnInfoSansPass :: ConnectInfoSansPass
+  , _port               :: Int
+  , _command            :: Command
   }
 
 fromCmdLineOpts
@@ -62,7 +56,7 @@ fromCmdLineOpts
   -> String
   -> ApplicationOptions
 fromCmdLineOpts CommandLineOptions{..} pass =
-  let dbConnInfo = addDbPass dbConnInfoSansPass pass
+  let _dbConnInfo = addDbPass _dbConnInfoSansPass pass
    in ApplicationOptions{..}
 
 commandLineOptionsParser :: Parser CommandLineOptions
@@ -97,13 +91,13 @@ doTheLeaderboard ApplicationOptions{..} = do
   logger <-
     Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelDebug (Label "unlabeled")
   flip runLogT logger $ do
-    let conn = connect dbConnInfo
+    let conn = connect _dbConnInfo
     pool <- mkConnectionPool conn
-    case command of
+    case _command of
       MigrateDb -> liftIO $
         withResource pool createSchema >>=
           either print (const $ putStrLn "Migrated successfully")
-      RunApp    -> runApp pool port
+      RunApp    -> runApp pool _port
 
 addDbPass
   :: ConnectInfoSansPass
