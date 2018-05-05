@@ -11,7 +11,8 @@ let
                 drv.libraryHaskellDepends ++
                 drv.executableHaskellDepends;
               })
-          ];
+          ] ++
+          (with env.haskellPackages; [ghcid cabal-install]);
       });
 in
   if env.pkgs.lib.inNixShell then drv.env else drv
