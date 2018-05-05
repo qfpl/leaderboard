@@ -8,13 +8,14 @@ import           Control.Exception          (Exception, bracket, bracket_,
                                              throw)
 import           Control.Lens               ((^.))
 import           Control.Monad              (void)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Data.ByteString            (ByteString)
 import           Data.ByteString.Char8      (pack)
 import           Data.Semigroup             ((<>))
-import           Database.Postgres.Temp     (DB (..), StartError,
-                                             startAndLogToTmp, stop)
 import           Database.PostgreSQL.Simple (ConnectInfo (..), Only (..),
                                              connect, execute)
+import           Database.Postgres.Temp     (DB (..), StartError,
+                                             startAndLogToTmp, stop)
 import           Network.HTTP.Client.TLS    (newTlsManager)
 import           Servant.Client             (BaseUrl (BaseUrl), ClientEnv (..),
                                              Scheme (Https))
@@ -34,12 +35,13 @@ data DbInitError =
   deriving (Show)
 instance Exception DbInitError
 
--- | Run some IO with a fresh database and leaderboar app.
+-- | Run some MonadIO with a fresh database and leaderboar app.
 withLeaderboard
-  :: ApplicationOptions
-  -> (ClientEnv -> IO a)
-  -> IO a
-withLeaderboard ao@ApplicationOptions{..} =
+  :: MonadIO m
+  => ApplicationOptions
+  -> (ClientEnv -> m a)
+  -> m a
+withLeaderboard ao@ApplicationOptions{..} action = do
   let
     setupLeaderboard = do
       dropAndCreateDb _dbConnInfo
@@ -48,11 +50,11 @@ withLeaderboard ao@ApplicationOptions{..} =
     makeEnv = do
       tlsManager <- newTlsManager
       pure . ClientEnv tlsManager $ BaseUrl Https "localhost" _port ""
-  in
-    bracket
-      (forkIO setupLeaderboard)
-      (`throwTo` Shutdown) .
-      (const . (makeEnv >>=))
+  -- TODO ajmccluskey: we should probs do something about exceptions here
+  threadId <- liftIO $ forkIO setupLeaderboard
+  result <- makeEnv >>= action
+  liftIO $ throwTo threadId Shutdown
+  pure result
 
 dropAndCreateDb
   :: ConnectInfo
