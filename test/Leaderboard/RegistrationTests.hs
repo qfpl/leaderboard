@@ -10,7 +10,6 @@ import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Trans.Class  (lift)
 import           Data.Text                  (Text)
 import           Database.PostgreSQL.Simple (ConnectInfo (..))
-import           Network.HTTP.Client.TLS    (newTlsManager)
 import           Network.HTTP.Types.Status  (forbidden403)
 import           Servant.Client             (BaseUrl (BaseUrl),
                                              ClientEnv (ClientEnv), ClientM,
@@ -30,32 +29,19 @@ import           Test.Tasty.Hedgehog        (testProperty)
 
 import           Leaderboard.TestClient     (LeaderboardClient (..),
                                              mkLeaderboardClient)
-import           Leaderboard.TestServer     (withLeaderboard)
+--import           Leaderboard.TestServer     (truncateTables)
 import           Leaderboard.Types          (ApplicationOptions (..),
                                              RegisterPlayer (..), dbConnInfo,
                                              _connectDatabase)
 
 registrationTests
-  :: ApplicationOptions
+  :: IO ()
+  -> ClientEnv
   -> TestTree
-registrationTests ao =
-  let
-    runTest' = runTest ao
-  in
+registrationTests truncateTables env =
     testGroup "registration" [
-      runTest' "register-first" propRegFirst
+      propRegFirst env truncateTables
     ]
-
-runTest
-  :: ApplicationOptions
-  -> TestName
-  -> (ClientEnv -> PropertyT IO ())
-  -> TestTree
-runTest ao name f =
-  testProperty name . property $ do
-    dbName <- forAll $ Gen.string (Range.constant 10 10) Gen.alpha
-    let ao' = ao & dbConnInfo . _connectDatabase .~ dbName
-    withLeaderboard ao' f
 
 genNonEmptyUnicode
   :: Gen Text
@@ -111,8 +97,11 @@ cRegFirst env =
 
 propRegFirst
   :: ClientEnv
-  -> PropertyT IO ()
-propRegFirst env = do
+  -> IO ()
+  -> TestTree
+propRegFirst env truncateTables =
+  testProperty "register-first" . property $ do
+  liftIO truncateTables
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
   executeSequential initialState commands

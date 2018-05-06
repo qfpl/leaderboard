@@ -7,6 +7,7 @@
 
 module Leaderboard.Main where
 
+import           Control.Concurrent          (MVar, putMVar)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Log           (LogT, askLogger, runLogT)
 import qualified Control.Monad.Log           as Log
@@ -21,10 +22,10 @@ import           Database.PostgreSQL.Simple  (ConnectInfo (..), Connection,
                                               close, connect)
 import           Network.Wai.Handler.Warp    (defaultSettings, setPort)
 import           Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
-import           Options.Applicative         (Parser, ParserInfo, flag,
-                                              fullDesc, help, helper, info,
-                                              long, metavar, progDesc,
-                                              strOption, (<**>), execParser)
+import           Options.Applicative         (Parser, ParserInfo, execParser,
+                                              flag, fullDesc, help, helper,
+                                              info, long, metavar, progDesc,
+                                              strOption, (<**>))
 import           System.Environment
 import           System.Exit                 (ExitCode (ExitFailure), exitWith)
 
@@ -82,22 +83,24 @@ main = do
   co <- execParser parserInfo
   -- TODO ajmccluskey: we might not need a pass, so use the maybe version of this and blank pass on Nothing
   password <- getEnv "DBPASS"
-  doTheLeaderboard $ fromCmdLineOpts co password
+  doTheLeaderboard Nothing $ fromCmdLineOpts co password
 
 doTheLeaderboard
-  :: ApplicationOptions
+  :: Maybe (MVar ())
+  -> ApplicationOptions
   -> IO ()
-doTheLeaderboard ApplicationOptions{..} = do
+doTheLeaderboard ready ao@ApplicationOptions{..} = do
   logger <-
     Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelDebug (Label "unlabeled")
   flip runLogT logger $ do
+    Log.info $ "Doing leaderboard with these options: " <> pack (show ao)
     let conn = connect _dbConnInfo
     pool <- mkConnectionPool conn
     case _command of
       MigrateDb -> liftIO $
         withResource pool createSchema >>=
           either print (const $ putStrLn "Migrated successfully")
-      RunApp    -> runApp pool _port
+      RunApp    -> runApp ready pool _port
 
 addDbPass
   :: ConnectInfoSansPass
@@ -108,10 +111,11 @@ addDbPass ConnectInfoSansPass{..} pass =
    in ConnectInfo{..}
 
 runApp
-  :: Pool Connection
+  :: Maybe (MVar ())
+  -> Pool Connection
   -> Int
   -> LogT Label IO ()
-runApp pool port = do
+runApp ready pool port = do
     logger <- askLogger
     Log.info "Creating/retrieving JWK"
     jwk <- liftIO $ withResource pool (`selectOrPersistJwk` genJwk)
@@ -123,6 +127,7 @@ runApp pool port = do
         Log.error $ "Error with JWK: " <> (pack . show $ e)
         liftIO . exitWith . ExitFailure $ 1
     Log.info $ "Starting app on port " <> (pack . show $ port)
+    maybe (pure ()) (liftIO . (`putMVar` ())) ready
     either exitFail doIt jwk
 
 mkConnectionPool

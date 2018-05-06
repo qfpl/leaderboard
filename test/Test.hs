@@ -2,26 +2,31 @@
 
 module Main where
 
-import           Control.Concurrent            (forkIO, throwTo)
+import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
+                                                throwTo)
 import           Control.Exception             (Exception, bracket, bracket_,
                                                 throw)
-import           Control.Lens                  ((^.))
+import           Control.Lens                  ((&), (.~), (^.))
 import           Data.ByteString               (ByteString)
 import           Data.ByteString.Char8         (pack)
 import           Data.Semigroup                ((<>))
 import           Database.Postgres.Temp        (DB (..), StartError,
-                                                stop, startAndLogToTmp)
+                                                startAndLogToTmp, stop)
 import           Database.PostgreSQL.Simple    (ConnectInfo (..))
+import           Network.Connection            (TLSSettings (..))
+import           Network.HTTP.Client.TLS       (mkManagerSettings,
+                                                newTlsManagerWith)
 import           Servant.Client                (BaseUrl (BaseUrl),
-                                                Scheme (Https))
+                                                ClientEnv (..), Scheme (Https))
 
 import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
 
-import           Leaderboard.Main              (ApplicationOptions (..),
-                                                Command (..),
-                                                doTheLeaderboard)
+import           Leaderboard.Main              (doTheLeaderboard)
 import           Leaderboard.RegistrationTests (registrationTests)
+import           Leaderboard.TestServer        (truncateTables)
+import           Leaderboard.Types             (ApplicationOptions (..),
+                                                Command (..), command)
 
 data Shutdown = Shutdown deriving (Show)
 instance Exception Shutdown
@@ -32,24 +37,21 @@ data DbInitError =
   deriving (Show)
 instance Exception DbInitError
 
-host :: String
-host = "localhost"
-
 main :: IO ()
 main =
   withDb $ \DB{..} -> do
   let
-    ao@ApplicationOptions{..} = ApplicationOptions connectionInfo 7645 RunApp
-    url = BaseUrl Https host port ""
-  withLeaderboard ao $ defaultMain (allTheTests dbConnInfo url)
+    ao = ApplicationOptions connectionInfo 7645 RunApp
+    tt = truncateTables connectionInfo
+  withLeaderboard ao (defaultMain . allTheTests tt)
 
 allTheTests
-  :: ConnectInfo
-  -> BaseUrl
+  :: IO ()
+  -> ClientEnv
   -> TestTree
-allTheTests ci url =
+allTheTests tt env =
   testGroup "leaderboard"
-  [ registrationTests ci url
+  [ registrationTests tt env
   ]
 
 withDb
@@ -68,13 +70,26 @@ withDb f =
 
 withLeaderboard
   :: ApplicationOptions
+  -> (ClientEnv -> IO a)
   -> IO a
-  -> IO a
-withLeaderboard ao =
+withLeaderboard ao@ApplicationOptions{..} =
   let
-    aoMigrate = ao { command = MigrateDb }
+    aoMigrate = ao & command .~ MigrateDb
     setupLeaderboard = do
-      doTheLeaderboard aoMigrate
-      doTheLeaderboard ao
+      ready <- newEmptyMVar
+      thread <- forkIO $ do
+        doTheLeaderboard Nothing aoMigrate
+        doTheLeaderboard (Just ready) ao
+      takeMVar ready
+      pure thread
+    makeEnv = do
+      let
+        tlsSettings = TLSSettingsSimple
+                      { settingDisableCertificateValidation = True
+                      , settingDisableSession = False
+                      , settingUseServerName = True
+                      }
+      tlsManager <- newTlsManagerWith $ mkManagerSettings tlsSettings Nothing
+      pure . ClientEnv tlsManager $ BaseUrl Https "localhost" _port ""
   in
-    bracket (forkIO setupLeaderboard) (`throwTo` Shutdown) . const
+    bracket setupLeaderboard (`throwTo` Shutdown) . const . (makeEnv >>=)

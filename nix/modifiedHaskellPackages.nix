@@ -22,5 +22,6 @@ in
       if nixpkgs.haskell.compiler.${compiler}.version < "8.2"
       then nixpkgs.haskell.lib.doJailbreak super.concurrent-output
       else super.concurrent-output;
+    http-client-tls = self.callHackage "http-client-tls" "0.3.5.3" {};
   };
 }
