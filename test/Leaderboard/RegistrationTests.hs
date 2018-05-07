@@ -61,12 +61,15 @@ genRegPlayerRandomAdmin =
 -- REGISTER FIRST
 --------------------------------------------------------------------------------
 
-newtype RegFirstState (v :: * -> *) =
-  RegFirstState Bool
+data RegisterState (v :: * -> *) =
+  RegisterState
+  { registeredFirst :: Bool
+  , userCount :: Int
+  }
   deriving (Eq, Show)
 
-initialState :: RegFirstState v
-initialState = RegFirstState False
+initialState :: RegisterState v
+initialState = RegisterState False 0
 
 newtype RegFirst (v :: * -> *) =
   RegFirst RegisterPlayer
@@ -77,7 +80,7 @@ instance HTraversable RegFirst where
 
 cRegFirst
   :: ClientEnv
-  -> Command Gen (PropertyT IO) RegFirstState
+  -> Command Gen (PropertyT IO) RegisterState
 cRegFirst env =
   let
     gen = const . Just . fmap RegFirst $ genRegPlayerRandomAdmin
@@ -85,7 +88,7 @@ cRegFirst env =
   in
     Command gen execute [
       Update $ \_in _c _out -> RegFirstState True
-    , Ensure $ \(RegFirstState sOld) (RegFirstState sNew) _input r ->
+    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input r ->
         case r of
           Right _ -> sOld === False >> sNew === True
           Left FailureResponse{..} ->
