@@ -21,8 +21,8 @@ import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
 import           Database.Beam               (unAuto)
-import           Servant                     ((:<|>) ((:<|>)), (:>), Header,
-                                              Headers, JSON,
+import           Servant                     ((:<|>) ((:<|>)), (:>), Get,
+                                              Header, Headers, JSON,
                                               NoContent (NoContent),
                                               PostNoContent, ReqBody,
                                               ServantErr, ServerT, err401,
@@ -36,13 +36,16 @@ import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
 import           Leaderboard.Schema          (Player, PlayerT (..))
-import           Leaderboard.Types           (Login (..), PlayerSession (..),
+import           Leaderboard.Types           (Login (..),
+                                              PlayerCount (PlayerCount),
+                                              PlayerSession (..),
                                               RegisterPlayer (..))
 
 type PlayerAPI auths =
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] (AuthHeaders NoContent)
   :<|> "login" :> ReqBody '[JSON] Login :> PostNoContent '[JSON] (AuthHeaders NoContent)
+  :<|> "player-count" :> Get '[JSON] PlayerCount
 
 type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
 
@@ -60,6 +63,7 @@ playerServer cs jwts =
        register
   :<|> registerFirst cs jwts
   :<|> login cs jwts
+  :<|> playerCount
 
 register
   :: ( HasDbConnPool r
@@ -132,6 +136,17 @@ login cs jwts Login{..} =
         then acceptLogin' cs jwts p
         else throwLoginFail ("Bad password" :: T.Text)
 
+playerCount
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadError ServantErr m
+     , MonadReader r m
+     , MonadLog Label m
+     )
+  => m PlayerCount
+playerCount =
+  withLabel (Label "/player-count") $ PlayerCount <$> getPlayerCount
+
 acceptLogin'
   :: ( MonadError ServantErr m
      , MonadLog Label m
@@ -168,3 +183,19 @@ addFirstPlayer cs jwts rp = do
   -- Force admin flag to true for first registration
   mp <- withConn $ \conn -> liftIO . insertPlayer conn $ rp {_lbrIsAdmin = Just True}
   maybe playerThrow (acceptLogin' cs jwts) mp
+
+getPlayerCount
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadError ServantErr m
+     , MonadReader r m
+     , MonadLog Label m
+     )
+  => m Integer
+getPlayerCount = do
+  let
+    throwNoPlayerCount e = do
+      Log.error $ "Error retrieving player count: " <> (T.pack . show $ e)
+      throwError err500 { errBody = "Error retrieving player count" }
+  en <- withConn $ liftIO . selectPlayerCount
+  either throwNoPlayerCount pure en

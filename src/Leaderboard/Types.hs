@@ -95,3 +95,10 @@ instance ToJWT PlayerSession
 instance FromJWT PlayerSession
 instance ToJSON PlayerSession
 instance FromJSON PlayerSession
+
+newtype PlayerCount
+  = PlayerCount Integer
+  deriving (Eq, Generic, Show)
+
+instance FromJSON PlayerCount
+instance ToJSON PlayerCount

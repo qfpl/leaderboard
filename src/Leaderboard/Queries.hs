@@ -135,4 +135,4 @@ countAll conn table =
   B.select $ B.aggregate_  (const B.countAll_) table
 
 withDb =
-  B.withDatabaseDebug putStrLn
+  B.withDatabase --Debug putStrLn
