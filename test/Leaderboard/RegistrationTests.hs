@@ -9,6 +9,7 @@ import           Control.Lens               ((&), (.~))
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Trans.Class  (lift)
 import           Data.Bool                  (bool)
+import           Data.Semigroup             ((<>))
 import           Data.Text                  (Text)
 import           Database.PostgreSQL.Simple (ConnectInfo (..))
 import           Network.HTTP.Types.Status  (forbidden403)
@@ -91,9 +92,11 @@ cRegFirst env =
       let f = bool RegFirstForbidden RegFirst (n == 0)
        in Just (f <$> genRegPlayerRandomAdmin)
     execute cmd =
-      let rp = getPlayer cmd
-      in lift . flip runClientM env $
-           (,) <$> lcRegisterFirst mkLeaderboardClient rp <*> lcPlayerCount mkLeaderboardClient
+      let
+        reg = lcRegisterFirst mkLeaderboardClient . getPlayer $ cmd
+        count = lcPlayerCount mkLeaderboardClient
+      in
+        lift . flip runClientM env $ (,) <$> reg <*> count
   in
     Command gen execute [
       Update $ \s c _out ->
