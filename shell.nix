@@ -9,7 +9,8 @@ let
           [ (env.haskellPackages.hoogleLocal {
               packages =
                 drv.libraryHaskellDepends ++
-                drv.executableHaskellDepends;
+                drv.executableHaskellDepends ++
+                drv.testHaskellDepends;
               })
           ] ++
           (with env.haskellPackages; [ghcid cabal-install]);
