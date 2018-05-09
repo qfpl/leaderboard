@@ -5,12 +5,14 @@
 
 module Leaderboard.Types where
 
-import           Control.Lens               (makeLenses, Lens', lens)
+import           Control.Lens               (Lens', lens, makeLenses)
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, ToJSON, object,
                                              parseJSON, toJSON, withObject,
-                                             (.:), (.=))
+                                             (.:), (.=), Value (String))
+import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
+import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
@@ -99,6 +101,17 @@ instance FromJSON PlayerSession
 newtype PlayerCount
   = PlayerCount Integer
   deriving (Eq, Generic, Show)
-
 instance FromJSON PlayerCount
 instance ToJSON PlayerCount
+
+-- | We're recreating what is already in @servant-auth-client@, however we need instances that it
+-- doesn't have, so this avoids the orphans.
+newtype Token
+  = Token { getToken :: ByteString }
+  deriving (Eq, Generic, Show)
+instance FromJSON Token where
+  parseJSON =
+    withObject "Token" $ \v ->
+      Token . encodeUtf8 <$> v .: "token"
+instance ToJSON Token where
+  toJSON = String . decodeUtf8 . getToken

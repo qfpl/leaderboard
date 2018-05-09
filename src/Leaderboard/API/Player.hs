@@ -16,18 +16,15 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
                                               verifyPass')
-import           Data.ByteString             as ByteString
 import qualified Data.ByteString.Lazy.Char8  as BSL8
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
 import           Database.Beam               (unAuto)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Get,
-                                              Header, Headers, JSON,
-                                              NoContent (NoContent), PlainText,
-                                              PostNoContent, ReqBody,
-                                              ServantErr, ServerT, err401,
-                                              err403, err500, errBody)
+                                              Header, Headers, JSON, Post,
+                                              ReqBody, ServantErr, ServerT,
+                                              err401, err403, err500, errBody)
 import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               CookieSettings, JWTSettings,
                                               SetCookie, acceptLogin, makeJWT)
@@ -40,13 +37,13 @@ import           Leaderboard.Schema          (Player, PlayerT (..))
 import           Leaderboard.Types           (Login (..),
                                               PlayerCount (PlayerCount),
                                               PlayerSession (..),
-                                              RegisterPlayer (..))
+                                              RegisterPlayer (..), Token (..))
 
 type PlayerAPI auths =
-       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
-  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] (AuthHeaders NoContent)
+       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Token
+  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] (AuthHeaders Token)
   -- TODO ajmccluskey: should probably make this return JSON out of consistency
-  :<|> "login" :> ReqBody '[JSON] Login :> PostNoContent '[PlainText] (AuthHeaders ByteString)
+  :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] (AuthHeaders Token)
   :<|> "player-count" :> Get '[JSON] PlayerCount
 
 type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
@@ -62,9 +59,9 @@ playerServer
   -> JWTSettings
   -> ServerT (PlayerAPI auths) m
 playerServer cs jwts =
-       register
+       register jwts
   :<|> registerFirst cs jwts
-  :<|> login cs jwts
+  :<|> authenticate cs jwts
   :<|> playerCount
 
 register
@@ -74,10 +71,11 @@ register
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => AuthResult PlayerSession
+  => JWTSettings
+  -> AuthResult PlayerSession
   -> RegisterPlayer
-  -> m NoContent
-register arp rp =
+  -> m Token
+register jwts arp rp =
   withLabel (Label "/register") $
   case arp of
     Authenticated PlayerSession{..} -> do
@@ -88,11 +86,32 @@ register arp rp =
           throwError err401
         Right Player{..} ->
           if _playerIsAdmin
-            then withConn $ \conn -> liftIO (NoContent <$ insertPlayer conn rp)
+            then (insertPlayer' jwts rp)
             else throwError $ err401 {errBody = "Must be an admin to register a new player"}
     ar ->  do
       Log.info $ "Failed authentication: " <> T.pack (show ar)
       throwError $ err401 {errBody = BSL8.pack (show ar)}
+
+insertPlayer'
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     , MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => JWTSettings
+  -> RegisterPlayer
+  -> m Token
+insertPlayer' jwts rp = do
+  let
+    throwX msg = do
+      Log.error . (msg <>) . T.pack . show $ rp
+      throwError $ err500 {errBody = "Error registering player"}
+    throwNoPlayer = throwX "Inserting player into database failed -- `Nothing` returned for "
+    throwNoId = throwX "No player ID returned for "
+  mp <- withConn $ \conn -> liftIO $ insertPlayer conn rp
+  mpId <- maybe throwNoPlayer (pure . unAuto . _playerId) mp
+  maybe throwNoId (makeToken jwts) mpId
 
 registerFirst
   :: ( HasDbConnPool r
@@ -104,7 +123,7 @@ registerFirst
   => CookieSettings
   -> JWTSettings
   -> RegisterPlayer
-  -> m (AuthHeaders NoContent)
+  -> m (AuthHeaders Token)
 registerFirst cs jwts rp = do
   numPlayers' <- withConn $ liftIO . selectPlayerCount
   numPlayers <- either (const $ throwError err500) pure numPlayers'
@@ -112,7 +131,7 @@ registerFirst cs jwts rp = do
     then addFirstPlayer cs jwts rp
     else throwError $ err403 { errBody = "First user already added." }
 
-login
+authenticate
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
      , MonadReader r m
@@ -122,8 +141,8 @@ login
   => CookieSettings
   -> JWTSettings
   -> Login
-  -> m (AuthHeaders ByteString)
-login cs jwts Login{..} =
+  -> m (AuthHeaders Token)
+authenticate cs jwts Login{..} =
   withLabel (Label "/login") $ do
   let
     loginPass = Pass . encodeUtf8 $ _loginPassword
@@ -156,19 +175,14 @@ acceptLogin'
   => CookieSettings
   -> JWTSettings
   -> Player
-  -> m (AuthHeaders ByteString)
-acceptLogin' cs jwts p@Player{..} = do
+  -> m (AuthHeaders Token)
+acceptLogin' cs jwts Player{..} = do
   let
     throwNoId = do
       Log.error ("Player with email '" <> _playerEmail <> "' missing id")
       throwError err500
-    throwTokenError e = do
-      Log.error ("Error creating token for player '" <> T.pack (show p) <> ":")
-      Log.error ("    " <> T.pack (show e))
-      throwError err500
   pId <- maybe throwNoId pure . unAuto $ _playerId
-  eToken <- liftIO $ makeJWT (PlayerSession pId) jwts Nothing
-  token <- either throwTokenError (pure . BSL8.toStrict) eToken
+  token <- makeToken jwts pId
   mApplyCookies <- liftIO . acceptLogin cs jwts . PlayerSession $ pId
   case mApplyCookies of
     Nothing           -> throwError err401
@@ -184,13 +198,13 @@ addFirstPlayer
   => CookieSettings
   -> JWTSettings
   -> RegisterPlayer
-  -> m (AuthHeaders NoContent)
+  -> m (AuthHeaders Token)
 addFirstPlayer cs jwts rp = do
   let
     playerThrow = throwError $ err500 { errBody = "User registration failed" }
   -- Force admin flag to true for first registration
   mp <- withConn $ \conn -> liftIO . insertPlayer conn $ rp {_lbrIsAdmin = Just True}
-  maybe playerThrow (fmap (NoContent <$) . acceptLogin' cs jwts) mp
+  maybe playerThrow (acceptLogin' cs jwts) mp
 
 getPlayerCount
   :: ( HasDbConnPool r
@@ -207,3 +221,19 @@ getPlayerCount = do
       throwError err500 { errBody = "Error retrieving player count" }
   en <- withConn $ liftIO . selectPlayerCount
   either throwNoPlayerCount pure en
+
+makeToken
+  :: ( MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => JWTSettings
+  -> Int
+  -> m Token
+makeToken jwts pId = do
+  let
+    throwTokenError e = do
+      Log.error ("Error creating token for player with id '" <> T.pack (show pId) <> ":")
+      Log.error ("    " <> T.pack (show e))
+      throwError err500
+  eToken <- liftIO $ makeJWT (PlayerSession pId) jwts Nothing
+  either throwTokenError (pure . Token . BSL8.toStrict) eToken

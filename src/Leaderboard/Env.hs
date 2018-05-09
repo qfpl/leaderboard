@@ -47,9 +47,9 @@ withConn f =
 genJwk
   :: IO JWK
 genJwk = do
-  jwk <- genJWK (RSAGenParam (4096 `div` 8))
+  jwk' <- genJWK (RSAGenParam (4096 `div` 8))
   let
-    h = view thumbprint jwk :: Digest SHA256
+    h = view thumbprint jwk' :: Digest SHA256
     kid = view (re (base64url . digest) . utf8) h
-  pure $ set jwkKid (Just kid) jwk
+  pure $ set jwkKid (Just kid) jwk'
 

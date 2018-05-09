@@ -1,29 +1,19 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Leaderboard.TestClient where
 
 import           Data.ByteString        (ByteString)
 import           Servant.API            ((:<|>) ((:<|>)), NoContent)
-import           Servant.Auth.Client    (Token)
+import qualified Servant.Auth.Client    as Client (Token)
 import           Servant.Client         (ClientM, client)
 
 import           Leaderboard.API        (LeaderboardAPI, leaderboardAPI)
 import           Leaderboard.API.Player (AuthHeaders)
-import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer)
+import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
+                                         Token)
 
-data LeaderboardClient =
-  LeaderboardClient
-  { lcRegisterFirst :: RegisterPlayer -> ClientM (AuthHeaders NoContent)
-  , lcRegister      :: Token -> RegisterPlayer -> ClientM NoContent
-  , lcLogin         :: Login -> ClientM (AuthHeaders ByteString)
-  , lcPlayerCount   :: ClientM PlayerCount
-  }
+lcRegister      :: Client.Token -> RegisterPlayer -> ClientM Token
+lcRegisterFirst :: RegisterPlayer -> ClientM (AuthHeaders Token)
+lcAuthenticate  :: Login -> ClientM (AuthHeaders Token)
+lcPlayerCount   :: ClientM PlayerCount
 
-mkLeaderboardClient
-  :: LeaderboardClient
-mkLeaderboardClient =
-  let
-    (lcRegister :<|> lcRegisterFirst :<|> lcLogin :<|> lcPlayerCount) =
-      client leaderboardAPI
-  in
-    LeaderboardClient{..}
+(lcRegister :<|> lcRegisterFirst :<|> lcAuthenticate :<|> lcPlayerCount) =
+  client leaderboardAPI
