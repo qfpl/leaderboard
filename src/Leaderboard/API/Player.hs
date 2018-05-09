@@ -16,6 +16,7 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
                                               verifyPass')
+import           Data.ByteString             as ByteString
 import qualified Data.ByteString.Lazy.Char8  as BSL8
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as T
@@ -23,13 +24,13 @@ import           Data.Text.Encoding          (encodeUtf8)
 import           Database.Beam               (unAuto)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Get,
                                               Header, Headers, JSON,
-                                              NoContent (NoContent),
+                                              NoContent (NoContent), PlainText,
                                               PostNoContent, ReqBody,
                                               ServantErr, ServerT, err401,
                                               err403, err500, errBody)
 import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               CookieSettings, JWTSettings,
-                                              SetCookie, acceptLogin)
+                                              SetCookie, acceptLogin, makeJWT)
 
 import           Leaderboard.Env             (HasDbConnPool, withConn)
 import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
@@ -44,7 +45,8 @@ import           Leaderboard.Types           (Login (..),
 type PlayerAPI auths =
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] NoContent
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> PostNoContent '[JSON] (AuthHeaders NoContent)
-  :<|> "login" :> ReqBody '[JSON] Login :> PostNoContent '[JSON] (AuthHeaders NoContent)
+  -- TODO ajmccluskey: should probably make this return JSON out of consistency
+  :<|> "login" :> ReqBody '[JSON] Login :> PostNoContent '[PlainText] (AuthHeaders ByteString)
   :<|> "player-count" :> Get '[JSON] PlayerCount
 
 type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
@@ -120,7 +122,7 @@ login
   => CookieSettings
   -> JWTSettings
   -> Login
-  -> m (AuthHeaders NoContent)
+  -> m (AuthHeaders ByteString)
 login cs jwts Login{..} =
   withLabel (Label "/login") $ do
   let
@@ -154,17 +156,23 @@ acceptLogin'
   => CookieSettings
   -> JWTSettings
   -> Player
-  -> m (AuthHeaders NoContent)
-acceptLogin' cs jwts Player{..} = do
+  -> m (AuthHeaders ByteString)
+acceptLogin' cs jwts p@Player{..} = do
   let
     throwNoId = do
-      Log.error $ "Player with email '" <> _playerEmail <> "' missing id"
+      Log.error ("Player with email '" <> _playerEmail <> "' missing id")
+      throwError err500
+    throwTokenError e = do
+      Log.error ("Error creating token for player '" <> T.pack (show p) <> ":")
+      Log.error ("    " <> T.pack (show e))
       throwError err500
   pId <- maybe throwNoId pure . unAuto $ _playerId
+  eToken <- liftIO $ makeJWT (PlayerSession pId) jwts Nothing
+  token <- either throwTokenError (pure . BSL8.toStrict) eToken
   mApplyCookies <- liftIO . acceptLogin cs jwts . PlayerSession $ pId
   case mApplyCookies of
     Nothing           -> throwError err401
-    Just applyCookies -> pure $ applyCookies NoContent
+    Just applyCookies -> pure $ applyCookies token
 
 addFirstPlayer
   :: ( MonadBaseControl IO m
@@ -182,7 +190,7 @@ addFirstPlayer cs jwts rp = do
     playerThrow = throwError $ err500 { errBody = "User registration failed" }
   -- Force admin flag to true for first registration
   mp <- withConn $ \conn -> liftIO . insertPlayer conn $ rp {_lbrIsAdmin = Just True}
-  maybe playerThrow (acceptLogin' cs jwts) mp
+  maybe playerThrow (fmap (NoContent <$) . acceptLogin' cs jwts) mp
 
 getPlayerCount
   :: ( HasDbConnPool r

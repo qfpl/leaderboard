@@ -6,6 +6,7 @@ module Leaderboard.RegistrationTests
   ( registrationTests
   ) where
 
+import           Control.Exception          (throw)
 import           Control.Lens               ((&), (.~))
 import           Control.Monad.IO.Class     (liftIO)
 import           Control.Monad.Morph        (hoist)
@@ -15,6 +16,7 @@ import           Data.Semigroup             ((<>))
 import           Data.Text                  (Text)
 import           Database.PostgreSQL.Simple (ConnectInfo (..))
 import           Network.HTTP.Types.Status  (forbidden403)
+import           Servant.Auth.Client        (Token (Token))
 import           Servant.Client             (BaseUrl (BaseUrl),
                                              ClientEnv (ClientEnv), ClientM,
                                              Scheme (Https), ServantError (..),
@@ -34,9 +36,9 @@ import           Test.Tasty.Hedgehog        (testProperty)
 import           Leaderboard.TestClient     (LeaderboardClient (..),
                                              mkLeaderboardClient)
 import           Leaderboard.Types          (ApplicationOptions (..),
-                                             PlayerCount (..),
+                                             Login (..), PlayerCount (..),
                                              RegisterPlayer (..), dbConnInfo,
-                                             _connectDatabase, Login (..))
+                                             _connectDatabase)
 
 registrationTests
   :: IO ()
@@ -45,6 +47,7 @@ registrationTests
 registrationTests truncateTables env =
     testGroup "registration" [
       propRegFirst env truncateTables
+    , propRegister env truncateTables
     ]
 
 genNonEmptyUnicode
@@ -125,14 +128,32 @@ cRegFirst env =
 -- REGISTER
 --------------------------------------------------------------------------------
 
-data Register (v :: * -> *) = Register
+newtype Register (v :: * -> *) =
+  Register RegisterPlayer
   deriving (Eq, Show)
 instance HTraversable Register where
-  htraverse _ Register = pure Register
+  htraverse _ (Register rp) = pure (Register rp)
 
 cRegister
-  :: Command Gen (PropertyT ClientM) RegisterState
-cRegister = undefined
+  :: Token
+  -> Command Gen (PropertyT ClientM) RegisterState
+cRegister token =
+  let
+    gen _s = Just (Register <$> genRegPlayerRandomAdmin)
+    execute (Register rp) =
+      let
+        -- Empty token because client should manage cookie auth for us
+        reg = lcRegister mkLeaderboardClient token rp
+        count = lcPlayerCount mkLeaderboardClient
+      in
+        lift $ (,) <$> reg <*> count
+  in
+    Command gen execute [
+      Update $ \(RegisterState n) c _out -> RegisterState (n + 1)
+    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (_, PlayerCount c) ->
+        sNew === sOld + 1
+        >> c === sNew
+    ]
 
 propRegFirst
   :: ClientEnv
@@ -157,12 +178,15 @@ propRegister env truncateTables =
     _lbrPassword = "password"
     _lbrIsAdmin = Just True
     newPlayer = LeaderboardRegistration{..}
+    clientMToIO a = do
+      ea <- runClientM a env
+      either throw pure ea
 
-  liftIO truncateTables
-  commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState [cRegister]
-  hoist (`runClientM` env) $ do
-    lift $ (lcRegisterFirst mkLeaderboardClient) newPlayer
-    lift . lcLogin mkLeaderboardClient $ Login _lbrEmail _lbrPassword
+  hoist clientMToIO $ do
+    liftIO truncateTables
+    lift $ lcRegisterFirst mkLeaderboardClient newPlayer
+    token <- lift . lcLogin mkLeaderboardClient $ Login _lbrEmail _lbrPassword
+    commands <- forAll $
+      Gen.sequential (Range.linear 1 100) initialState [cRegister (Token token)]
     executeSequential initialState commands
 

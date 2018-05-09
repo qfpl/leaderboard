@@ -2,19 +2,20 @@
 
 module Leaderboard.TestClient where
 
+import           Data.ByteString        (ByteString)
 import           Servant.API            ((:<|>) ((:<|>)), NoContent)
 import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientM, client)
 
 import           Leaderboard.API        (LeaderboardAPI, leaderboardAPI)
 import           Leaderboard.API.Player (AuthHeaders)
-import           Leaderboard.Types      (Login, RegisterPlayer, PlayerCount)
+import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer)
 
 data LeaderboardClient =
   LeaderboardClient
   { lcRegisterFirst :: RegisterPlayer -> ClientM (AuthHeaders NoContent)
   , lcRegister      :: Token -> RegisterPlayer -> ClientM NoContent
-  , lcLogin         :: Login -> ClientM (AuthHeaders NoContent)
+  , lcLogin         :: Login -> ClientM (AuthHeaders ByteString)
   , lcPlayerCount   :: ClientM PlayerCount
   }
 
