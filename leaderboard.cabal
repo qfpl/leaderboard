@@ -80,6 +80,7 @@ test-suite leaderboard-tests
                      , http-client-tls >=0.3.5.2 && <0.4
                      , leaderboard
                      , lens >=4.0.5 && <5
+                     , mmorph >= 1.0 && <1.2
                      , postgresql-simple >=0.5.3.0 && <0.5.4
                      , postgresql-simple-url >=0.2 && <0.3
                      , servant >=0.11 && <0.14

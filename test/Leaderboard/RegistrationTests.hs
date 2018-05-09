@@ -1,5 +1,6 @@
-{-# LANGUAGE KindSignatures  #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE KindSignatures    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.RegistrationTests
   ( registrationTests
@@ -7,6 +8,7 @@ module Leaderboard.RegistrationTests
 
 import           Control.Lens               ((&), (.~))
 import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Morph        (hoist)
 import           Control.Monad.Trans.Class  (lift)
 import           Data.Bool                  (bool)
 import           Data.Semigroup             ((<>))
@@ -34,7 +36,7 @@ import           Leaderboard.TestClient     (LeaderboardClient (..),
 import           Leaderboard.Types          (ApplicationOptions (..),
                                              PlayerCount (..),
                                              RegisterPlayer (..), dbConnInfo,
-                                             _connectDatabase)
+                                             _connectDatabase, Login (..))
 
 registrationTests
   :: IO ()
@@ -119,6 +121,19 @@ cRegFirst env =
               _ -> failure
     ]
 
+--------------------------------------------------------------------------------
+-- REGISTER
+--------------------------------------------------------------------------------
+
+data Register (v :: * -> *) = Register
+  deriving (Eq, Show)
+instance HTraversable Register where
+  htraverse _ Register = pure Register
+
+cRegister
+  :: Command Gen (PropertyT ClientM) RegisterState
+cRegister = undefined
+
 propRegFirst
   :: ClientEnv
   -> IO ()
@@ -129,3 +144,25 @@ propRegFirst env truncateTables =
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState [cRegFirst env]
   executeSequential initialState commands
+
+propRegister
+  :: ClientEnv
+  -> IO ()
+  -> TestTree
+propRegister env truncateTables =
+  testProperty "register-counts" . property $ do
+  let
+    _lbrEmail = "test@qfpl.io" -- not a real email address
+    _lbrName = "test"
+    _lbrPassword = "password"
+    _lbrIsAdmin = Just True
+    newPlayer = LeaderboardRegistration{..}
+
+  liftIO truncateTables
+  commands <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState [cRegister]
+  hoist (`runClientM` env) $ do
+    lift $ (lcRegisterFirst mkLeaderboardClient) newPlayer
+    lift . lcLogin mkLeaderboardClient $ Login _lbrEmail _lbrPassword
+    executeSequential initialState commands
+
