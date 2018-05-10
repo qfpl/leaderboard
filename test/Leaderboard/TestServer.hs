@@ -27,7 +27,6 @@ tables =
   , "players"
   , "ladders"
   , "playerToLadder"
-  , "jwk"
   ]
 
 truncateTables
