@@ -81,9 +81,6 @@ newtype RegisterState (v :: * -> *) =
   RegisterState Integer
   deriving (Eq, Show)
 
-initialState :: RegisterState v
-initialState = RegisterState 0
-
 newtype RegFirst (v :: * -> *) =
     RegFirst RegisterPlayer
   deriving (Eq, Show)
@@ -129,20 +126,19 @@ cRegFirstForbidden env =
     gen _s = Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin
     execute (RegFirstForbidden rp) =
       let
-        reg = registerFirst rp
+        reg = failureClient (const "Should return 403") env $ registerFirst rp
         pc = successClient show env $ getPlayerCount <$> playerCount
       in
-        (,,) <$> pc <*> failureClient (const "Should return 403") env reg <*> pc
+        (,,) <$> pc <*> reg <*> pc
   in
     Command gen execute [
       Require $ \(RegisterState s) _input -> s > 0
     , Update $ \s _c _out -> s
     , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (cb, se, ca) -> do
         annotateRegFirst sOld sNew cb ca
-        sOld === 1
-        sNew === 1
-        cb === 1
-        ca === 1
+        sNew === sOld
+        cb === sOld
+        ca === sOld
         case se of
           FailureResponse{..} -> responseStatus === forbidden403
           _                   -> failure
@@ -176,13 +172,15 @@ cRegister env token =
   let
     gen _s = Just (Register <$> genRegPlayerRandomAdmin)
     execute (Register rp) =
-      successClient show env $ (,) <$> register token rp <*> playerCount
+      let pc = getPlayerCount <$> playerCount
+       in successClient show env $ (,) <$> register token rp <*> pc
   in
     Command gen execute [
-      Update $ \(RegisterState n) _cmd _out -> RegisterState (n + 1)
-    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (_, PlayerCount c) ->
+      Require $ \(RegisterState s) _input -> s > 0
+    , Update $ \(RegisterState n) _cmd _out -> RegisterState (n + 1)
+    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (_, c) -> do
         sNew === sOld + 1
-        >> c === sNew
+        c === sNew
     ]
 
 propRegFirst
@@ -191,6 +189,7 @@ propRegFirst
   -> TestTree
 propRegFirst env truncateTables =
   testProperty "register-first" . property $ do
+  let initialState = RegisterState 0
   liftIO truncateTables
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState $ ($ env) <$> [cRegFirst, cRegFirstForbidden]
@@ -208,10 +207,11 @@ propRegister env truncateTables =
     _lbrPassword = "password"
     _lbrIsAdmin = Just True
     newPlayer = LeaderboardRegistration{..}
+    initialState = RegisterState 1
 
   liftIO truncateTables
   token <- fmap toServantToken . successClient show env $ registerFirst newPlayer
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState [cRegister env token]
+    Gen.sequential (Range.linear 1 100) initialState [cRegister env token, cRegFirst env, cRegFirstForbidden env]
   executeSequential initialState commands
 
