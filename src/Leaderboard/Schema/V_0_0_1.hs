@@ -116,6 +116,23 @@ data MatchT f
   , _matchPlayer2Score :: C f Int
   , _matchTime         :: C f UTCTime
   }
+  deriving (Generic)
+
+instance Beamable MatchT
+instance Table MatchT where
+  data PrimaryKey MatchT f = MatchId (C f (Auto Int)) deriving Generic
+  primaryKey = MatchId . _matchId
+instance Beamable (PrimaryKey MatchT)
+
+type Match = MatchT Identity
+deriving instance Eq Match
+deriving instance Show Match
+deriving instance Ord Match
+
+type MatchId = PrimaryKey MatchT Identity
+deriving instance Eq MatchId
+deriving instance Show MatchId
+deriving instance Ord MatchId
 
 
 data LadderT f
