@@ -91,7 +91,7 @@ doTheLeaderboard
   -> IO ()
 doTheLeaderboard ready ao@ApplicationOptions{..} = do
   logger <-
-    Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelDebug (Label "unlabeled")
+    Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) Log.levelInfo (Label "unlabeled")
   flip runLogT logger $ do
     Log.info $ "Doing leaderboard with these options: " <> pack (show ao)
     let conn = connect _dbConnInfo

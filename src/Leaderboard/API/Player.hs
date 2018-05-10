@@ -189,7 +189,7 @@ insertPlayer'
   -> m Player
 insertPlayer' rp =
   withLabel (Label "insertPlayer") $ do
-  Log.info $ "Inserting player: " <> (T.pack . show $ rp)
+  Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
   let
     throwX msg = do
       Log.error . (msg <>) . T.pack . show $ rp
