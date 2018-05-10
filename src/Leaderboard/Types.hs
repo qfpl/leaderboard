@@ -9,7 +9,7 @@ import           Control.Lens               (Lens', lens, makeLenses)
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, ToJSON, object,
                                              parseJSON, toJSON, withObject,
-                                             (.:), (.=), Value (String))
+                                             (.:), (.=))
 import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
@@ -99,10 +99,15 @@ instance ToJSON PlayerSession
 instance FromJSON PlayerSession
 
 newtype PlayerCount
-  = PlayerCount Integer
+  = PlayerCount { getPlayerCount :: Integer }
   deriving (Eq, Generic, Show)
-instance FromJSON PlayerCount
-instance ToJSON PlayerCount
+instance FromJSON PlayerCount where
+  parseJSON =
+    withObject "PlayerCount" $ \v ->
+      PlayerCount <$> v .: "player-count"
+instance ToJSON PlayerCount where
+  toJSON (PlayerCount c) =
+    object ["player-count" .= c]
 
 -- | We're recreating what is already in @servant-auth-client@, however we need instances that it
 -- doesn't have, so this avoids the orphans.
@@ -114,4 +119,5 @@ instance FromJSON Token where
     withObject "Token" $ \v ->
       Token . encodeUtf8 <$> v .: "token"
 instance ToJSON Token where
-  toJSON = String . decodeUtf8 . getToken
+  toJSON (Token t)=
+    object ["token" .= decodeUtf8 t]
