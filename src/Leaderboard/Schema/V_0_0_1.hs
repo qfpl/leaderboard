@@ -14,6 +14,7 @@ import           Data.Aeson
 import           Data.ByteString                (ByteString)
 import           Data.Text                      (Text)
 import           Data.Text.Encoding             (decodeUtf8, encodeUtf8)
+import           Data.Time                      (UTCTime)
 import           Database.Beam                  (Auto, Beamable, C, Database,
                                                  Generic, Identity, PrimaryKey,
                                                  Table (PrimaryKey, primaryKey),
@@ -104,6 +105,17 @@ instance Table PlayerT where
   primaryKey = PlayerId . _playerId
 
 instance Beamable (PrimaryKey PlayerT)
+
+
+data MatchT f
+  = Match
+  { _matchId           :: C f (Auto Int)
+  , _matchPlayer1      :: PrimaryKey PlayerT f
+  , _matchPlayer2      :: PrimaryKey PlayerT f
+  , _matchPlayer1Score :: C f Int
+  , _matchPlayer2Score :: C f Int
+  , _matchTime         :: C f UTCTime
+  }
 
 
 data LadderT f
