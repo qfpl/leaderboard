@@ -18,6 +18,8 @@ import           Network.HTTP.Client.TLS       (mkManagerSettings,
                                                 newTlsManagerWith)
 import           Servant.Client                (BaseUrl (BaseUrl),
                                                 ClientEnv (..), Scheme (Https))
+import           System.Directory              (copyFile)
+import           System.FilePath               ((</>))
 
 import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
@@ -60,13 +62,17 @@ withDb
 withDb f =
   bracket
     (startAndLogToTmp [])
-    (splode stop)
+    (splode stop')
     (splode f)
   where
     splode f r =
       case r of
         Left e   -> throw . PgTempStartError $ e
         Right db -> f db
+    stop' db@DB{..} = do
+      copyFile (mainDir </> "output.txt") "tmp-postgres-output.txt"
+      copyFile (mainDir </> "error.txt") "tmp-postgres-error.txt"
+      stop db
 
 withLeaderboard
   :: ApplicationOptions
@@ -87,7 +93,7 @@ withLeaderboard ao@ApplicationOptions{..} =
         tlsSettings = TLSSettingsSimple
                       { settingDisableCertificateValidation = True
                       , settingDisableSession = False
-                      , settingUseServerName = True
+                      , settingUseServerName = False
                       }
       tlsManager <- newTlsManagerWith $ mkManagerSettings tlsSettings Nothing
       pure . ClientEnv tlsManager $ BaseUrl Https "localhost" _port ""
