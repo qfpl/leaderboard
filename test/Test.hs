@@ -4,15 +4,10 @@ module Main where
 
 import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
                                                 throwTo)
-import           Control.Exception             (Exception, bracket, bracket_,
-                                                throw)
-import           Control.Lens                  ((&), (.~), (^.))
-import           Data.ByteString               (ByteString)
-import           Data.ByteString.Char8         (pack)
-import           Data.Semigroup                ((<>))
+import           Control.Exception             (Exception, bracket, throw)
+import           Control.Lens                  ((&), (.~))
 import           Database.Postgres.Temp        (DB (..), StartError,
                                                 startAndLogToTmp, stop)
-import           Database.PostgreSQL.Simple    (ConnectInfo (..))
 import           Network.Connection            (TLSSettings (..))
 import           Network.HTTP.Client.TLS       (mkManagerSettings,
                                                 newTlsManagerWith)
@@ -65,10 +60,10 @@ withDb f =
     (splode stop')
     (splode f)
   where
-    splode f r =
+    splode g r =
       case r of
         Left e   -> throw . PgTempStartError $ e
-        Right db -> f db
+        Right db -> g db
     stop' db@DB{..} = do
       copyFile (mainDir </> "output.txt") "tmp-postgres-output.txt"
       copyFile (mainDir </> "error.txt") "tmp-postgres-error.txt"

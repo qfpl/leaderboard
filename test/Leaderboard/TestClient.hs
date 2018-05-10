@@ -1,12 +1,10 @@
 module Leaderboard.TestClient where
 
-import           Data.ByteString        (ByteString)
-import           Servant.API            ((:<|>) ((:<|>)), NoContent,
-                                         getResponse)
+import           Servant.API            ((:<|>) ((:<|>)), getResponse)
 import qualified Servant.Auth.Client    as SAC (Token (Token))
 import           Servant.Client         (ClientM, client)
 
-import           Leaderboard.API        (LeaderboardAPI, leaderboardAPI)
+import           Leaderboard.API        (leaderboardAPI)
 import           Leaderboard.API.Player (AuthHeaders)
 import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
                                          Token (..))

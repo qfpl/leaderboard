@@ -105,14 +105,13 @@ registerFirst
   -> m (AuthHeaders Token)
 registerFirst cs jwts rp =
   withLabel (Label "/register-first") $ do
-  Log.info "registerFirst called"
   let rp' = rp {_lbrIsAdmin = Just True}
   numPlayers' <- withConn $ liftIO . selectPlayerCount
   numPlayers <- either (const $ throwError err500) pure numPlayers'
   if numPlayers < 1
     then (authenticatePlayerId cs jwts <=< playerId <=< insertPlayer') rp'
     else do
-      Log.error $ T.pack (show numPlayers) <> " players already registered"
+      Log.info $ "registerFirst called but " <> T.pack (show numPlayers) <> " players already registered"
       throwError $ err403 { errBody = "First user already added." }
 
 authenticate
