@@ -121,12 +121,13 @@ insertPlayer conn LeaderboardRegistration{..} = do
 insertMatch
   :: Connection
   -> RqMatch
-  -> IO (Maybe Int)
+  -> IO (Either LeaderboardError Int)
 insertMatch conn RqMatch{..} = do
   let
     _matchId = B.Auto Nothing
-  ms <- insertValues conn (_leaderboardMatches leaderboardDb) [Match{..}]
-  pure $ listToMaybe ms ^? _Just . matchId . _Auto
+    noIdError = Left . DbError $ "No match ID returned on insert"
+  ms <- tryJustPgError $ insertValues conn (_leaderboardMatches leaderboardDb) [Match{..}]
+  pure $ maybe noIdError Right . (^? _Just . matchId . _Auto) . listToMaybe =<< ms
 
 -- Unsure of the types for the following, and the inferred types cause compiler errors
 insertValues conn table vals =

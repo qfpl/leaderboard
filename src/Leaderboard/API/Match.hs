@@ -7,7 +7,8 @@
 
 module Leaderboard.API.Match where
 
-import           Control.Monad.Except        (MonadError, throwError)
+import           Control.Monad.Except        (ExceptT (ExceptT), MonadError,
+                                              throwError)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Log           (MonadLog)
 import qualified Control.Monad.Log           as Log
@@ -17,8 +18,9 @@ import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
                                               verifyPass')
 import qualified Data.ByteString.Lazy.Char8  as BSL8
+import           Data.Maybe                  (fromMaybe)
 import           Data.Semigroup              ((<>))
-import qualified Data.Text                   as T
+import           Data.Text                   (pack)
 import           Data.Text.Encoding          (encodeUtf8)
 import           Database.Beam               (unAuto)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
@@ -32,7 +34,8 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               SetCookie, acceptLogin, makeJWT)
 
 import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
-import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
+import           Leaderboard.Queries         (insertMatch, insertPlayer,
+                                              selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
 import           Leaderboard.Schema          (Match, MatchId, Player, PlayerId,
@@ -41,11 +44,11 @@ import           Leaderboard.Types           (Login (..),
                                               PlayerCount (PlayerCount),
                                               PlayerSession (..),
                                               RegisterPlayer (..), RqMatch (..),
-                                              Token (..))
+                                              Token (..), tryJustPgError)
 
 type MatchAPI auths =
   Auth auths PlayerSession :> "matches" :>
-  (      "add" :> ReqBody '[JSON] RqMatch :> PostNoContent '[JSON] NoContent
+  (      "add" :> ReqBody '[JSON] RqMatch :> PostNoContent '[JSON] Int
     :<|> "list" :> Get '[JSON] [Match]
     :<|> Capture "id" MatchId :> DeleteNoContent '[JSON] NoContent
     :<|> Capture "id" MatchId :> ReqBody '[JSON] RqMatch :> PutNoContent '[JSON] NoContent
@@ -74,11 +77,17 @@ addMatch
      )
   => AuthResult PlayerSession
   -> RqMatch
-  -> m NoContent
+  -> m Int
 addMatch arp match =
   asPlayer arp $ \_pId ->
-  withLabel (Label "/matches/add") $ do
-    undefined --insertMatch match
+  withLabel (Label "/matches/add") $
+  withConn $ \conn -> do
+    let
+      bad e = do
+        Log.error $ "Error inserting player: " <> (pack . show $ e)
+        throwError $ err500 {errBody = "Insert of match failed"}
+    eId <- liftIO $ insertMatch conn match
+    either bad pure eId
 
 listMatches
   :: ( HasDbConnPool r
