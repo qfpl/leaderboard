@@ -7,45 +7,28 @@
 
 module Leaderboard.API.Match where
 
-import           Control.Monad.Except        (ExceptT (ExceptT), MonadError,
-                                              throwError)
+import           Control.Monad.Except        (MonadError, throwError)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Log           (MonadLog)
 import qualified Control.Monad.Log           as Log
 import           Control.Monad.Log.Label     (Label (Label), withLabel)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
-                                              verifyPass')
-import qualified Data.ByteString.Lazy.Char8  as BSL8
-import           Data.Maybe                  (fromMaybe)
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text, pack)
-import           Data.Text.Encoding          (encodeUtf8)
-import           Database.Beam               (unAuto)
 import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
-                                              DeleteNoContent, Get, Header,
-                                              Headers, JSON, NoContent, Post,
-                                              PostNoContent, PutNoContent,
-                                              ReqBody, ServantErr, ServerT,
-                                              err401, err403, err500, errBody)
-import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
-                                              CookieSettings, JWTSettings,
-                                              SetCookie, acceptLogin, makeJWT)
+                                              DeleteNoContent, Get, JSON,
+                                              NoContent, PostNoContent,
+                                              PutNoContent, ReqBody, ServantErr,
+                                              ServerT, err500, errBody)
+import           Servant.Auth.Server         (Auth, AuthResult)
 
 import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
-import           Leaderboard.Queries         (selectMatches, insertMatch, insertPlayer,
-                                              selectPlayerByEmail,
-                                              selectPlayerById,
-                                              selectPlayerCount)
-import           Leaderboard.Schema          (Match, MatchId, Player, PlayerId,
-                                              PlayerT (..))
-import           Leaderboard.Types           (Login (..),
-                                              PlayerCount (PlayerCount),
-                                              PlayerSession (..),
-                                              RegisterPlayer (..), RqMatch (..),
-                                              Token (..), tryJustPgError)
+import           Leaderboard.Queries         (insertMatch, selectMatches)
+import           Leaderboard.Schema          (Match, MatchId)
+import           Leaderboard.Types           (PlayerSession (..), RqMatch (..),
+                                              tryJustPgError)
 
 type MatchAPI auths =
   Auth auths PlayerSession :> "matches" :>
