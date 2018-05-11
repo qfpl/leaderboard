@@ -24,10 +24,10 @@ import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.Schema        (RegisterPlayer (..))
 import           Leaderboard.TestClient    (playerCount, register,
                                             registerFirst, toServantToken)
-import           Leaderboard.Types         (PlayerCount (..))
+import           Leaderboard.Types         (PlayerCount (..),
+                                            RegisterPlayer (..))
 
 registrationTests
   :: IO ()

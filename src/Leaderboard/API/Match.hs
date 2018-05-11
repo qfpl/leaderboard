@@ -31,15 +31,17 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               CookieSettings, JWTSettings,
                                               SetCookie, acceptLogin, makeJWT)
 
-import           Leaderboard.Env             (HasDbConnPool, withConn, asPlayer)
+import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
 import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
-import           Leaderboard.Schema          (Match, MatchId, Player,
-                                              PlayerT (..), RegisterPlayer (..), RqMatch (..), PlayerId)
+import           Leaderboard.Schema          (Match, MatchId, Player, PlayerId,
+                                              PlayerT (..))
 import           Leaderboard.Types           (Login (..),
                                               PlayerCount (PlayerCount),
-                                              PlayerSession (..), Token (..))
+                                              PlayerSession (..),
+                                              RegisterPlayer (..), RqMatch (..),
+                                              Token (..))
 
 type MatchAPI auths =
   Auth auths PlayerSession :> "matches" :>

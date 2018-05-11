@@ -34,11 +34,11 @@ import           Leaderboard.Env             (HasDbConnPool, withConn)
 import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
-import           Leaderboard.Schema          (Player, PlayerT (..),
-                                              RegisterPlayer (..))
+import           Leaderboard.Schema          (Player, PlayerT (..))
 import           Leaderboard.Types           (Login (..),
                                               PlayerCount (PlayerCount),
-                                              PlayerSession (..), Token (..))
+                                              PlayerSession (..),
+                                              RegisterPlayer (..), Token (..))
 
 type PlayerAPI auths =
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Token
