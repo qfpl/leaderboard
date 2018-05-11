@@ -1,7 +1,9 @@
 {-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -10,21 +12,26 @@
 module Leaderboard.Schema.V_0_0_1 where
 
 import           Control.Lens                   (makeLenses)
-import           Data.Aeson
+import           Data.Aeson                     (FromJSON (..), ToJSON (..),
+                                                 Value (Null, Number), object,
+                                                 withObject, (.:), (.=))
 import           Data.ByteString                (ByteString)
 import           Data.Text                      (Text)
 import           Data.Text.Encoding             (decodeUtf8, encodeUtf8)
 import           Data.Time                      (UTCTime)
-import           Database.Beam                  (Auto, Beamable, C, Database,
-                                                 Generic, Identity, PrimaryKey,
+import           Database.Beam                  (Auto (Auto), Beamable, C,
+                                                 Database, Generic, Identity,
+                                                 PrimaryKey,
                                                  Table (PrimaryKey, primaryKey),
                                                  TableEntity)
 import           Database.Beam.Migrate          (CheckedDatabaseSettings,
                                                  Migration, createTable, double,
-                                                 field, int, notNull, varchar)
+                                                 field, int, notNull, timestamp,
+                                                 varchar)
 
 import           Database.Beam.Postgres         (PgCommandSyntax, Postgres)
 import           Database.Beam.Postgres.Migrate (boolean, bytea, serial)
+import           Servant                        (FromHttpApiData (parseUrlPiece))
 import           Servant.Auth.Server            (FromJWT, ToJWT)
 
 data RatingT f
@@ -68,6 +75,14 @@ data PlayerT f
 
 type Player = PlayerT Identity
 type PlayerId = PrimaryKey PlayerT Identity
+
+instance FromJSON PlayerId where
+  parseJSON =
+    fmap (PlayerId . Auto . pure) . parseJSON
+
+instance ToJSON PlayerId where
+  toJSON (PlayerId (Auto mId)) =
+    maybe Null (Number . fromIntegral) mId
 
 instance ToJSON Player where
   toJSON (Player a b c d e) =
@@ -133,6 +148,20 @@ type MatchId = PrimaryKey MatchT Identity
 deriving instance Eq MatchId
 deriving instance Show MatchId
 deriving instance Ord MatchId
+
+instance FromHttpApiData MatchId where
+  parseUrlPiece = fmap (MatchId . Auto . pure) . parseUrlPiece
+
+instance ToJSON Match where
+  toJSON Match{..} =
+    object
+    [ "id" .= _matchId
+    , "player1" .= _matchPlayer1
+    , "player2" .= _matchPlayer2
+    , "player1Score" .= _matchPlayer1Score
+    , "player2Score" .= _matchPlayer2Score
+    , "timestamp" .= _matchTime
+    ]
 
 
 data LadderT f
@@ -212,6 +241,7 @@ data LeaderboardDb f
   = LeaderboardDb
   { _leaderboardRatings        :: f (TableEntity RatingT)
   , _leaderboardPlayers        :: f (TableEntity PlayerT)
+  , _leaderboardMatches        :: f (TableEntity MatchT)
   , _leaderboardLadders        :: f (TableEntity LadderT)
   , _leaderboardPlayerToLadder :: f (TableEntity PlayerToLadderT)
   , _leaderboardJwk            :: f (TableEntity JwkT)
@@ -239,6 +269,15 @@ migration () =
       (field "password" bytea notNull)
       (field "is_admin" boolean notNull)
     ) <*>
+  createTable "matches"
+    (Match
+      (field "id" serial)
+      (PlayerId $ field "player1" int notNull)
+      (PlayerId $ field "player2" int notNull)
+      (field "player1score" int notNull)
+      (field "player2score" int notNull)
+      (field "time" timestamp notNull)
+    ) <*>
   createTable "ladders"
     (Ladder
       (field "id" serial)
@@ -256,6 +295,60 @@ migration () =
       (field "id" serial)
       (field "jwk" (varchar Nothing) notNull)
     )
+
+-------------------------------------------------------------------------------
+-- These are user facing types that relate to types from the schema, so we keep
+-- them together
+-------------------------------------------------------------------------------
+
+-- TODO ajmccluskey: newtype these!
+data RegisterPlayer
+  = LeaderboardRegistration
+    { _lbrEmail    :: Text
+    , _lbrName     :: Text
+    , _lbrPassword :: Text
+    , _lbrIsAdmin  :: Maybe Bool
+    }
+  deriving (Eq, Generic, Show)
+
+instance FromJSON RegisterPlayer where
+  parseJSON =
+    withObject "RegisterPlayer" $ \v ->
+      LeaderboardRegistration <$>
+      v .: "email" <*>
+      v .: "name" <*>
+      v .: "password" <*>
+      v .: "isAdmin"
+
+instance ToJSON RegisterPlayer where
+  toJSON LeaderboardRegistration{..} =
+    object
+    [ "email" .= _lbrEmail
+    , "name" .= _lbrName
+    , "password" .= _lbrPassword
+    , "isAdmin" .= _lbrIsAdmin
+    ]
+
+-- | Match used in requests.
+data RqMatch
+  = RqMatch
+  { _matchPlayer1      :: PlayerId
+  , _matchPlayer2      :: PlayerId
+  , _matchPlayer1Score :: Int
+  , _matchPlayer2Score :: Int
+  , _matchTime         :: UTCTime
+  }
+  deriving (Eq, Show)
+
+instance FromJSON RqMatch where
+  parseJSON =
+    withObject "RqMatch" $ \v ->
+      RqMatch
+      <$> v .: "player1"
+      <*> v .: "player2"
+      <*> v .:  "player1Score"
+      <*> v .:  "player2Score"
+      <*> v .:  "time"
 
 makeLenses ''LeaderboardDb
 makeLenses ''PlayerT

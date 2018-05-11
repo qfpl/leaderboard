@@ -39,34 +39,6 @@ _connectDatabase =
     Pg.connectDatabase
     (\ci name -> ci { Pg.connectDatabase = name })
 
--- TODO ajmccluskey: newtype these!
-data RegisterPlayer
-  = LeaderboardRegistration
-    { _lbrEmail    :: Text
-    , _lbrName     :: Text
-    , _lbrPassword :: Text
-    , _lbrIsAdmin  :: Maybe Bool
-    }
-  deriving (Eq, Generic, Show)
-
-instance FromJSON RegisterPlayer where
-  parseJSON =
-    withObject "RegisterPlayer" $ \v ->
-      LeaderboardRegistration <$>
-      v .: "email" <*>
-      v .: "name" <*>
-      v .: "password" <*>
-      v .: "isAdmin"
-
-instance ToJSON RegisterPlayer where
-  toJSON LeaderboardRegistration{..} =
-    object
-    [ "email" .= _lbrEmail
-    , "name" .= _lbrName
-    , "password" .= _lbrPassword
-    , "isAdmin" .= _lbrIsAdmin
-    ]
-
 data LeaderboardError =
     ServantError ServantErr
   | PostgresError PostgresException

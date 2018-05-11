@@ -19,6 +19,7 @@ library
   exposed-modules:     Database.PgErrors
                        Leaderboard.API
                        Leaderboard.API.Player
+                       Leaderboard.API.Match
                        Leaderboard.Application
                        Leaderboard.Env
                        Leaderboard.Main
@@ -87,6 +88,7 @@ test-suite leaderboard-tests
                      , postgresql-simple >=0.5.3.0 && <0.5.4
                      , postgresql-simple-url >=0.2 && <0.3
                      , servant >=0.11 && <0.14
+                     , servant-auth >=0.3 && <0.4
                      , servant-auth-client >=0.3 && <0.4
                      , servant-client >=0.11 && <0.14
                      , text >=1.2.2.2 && <1.3

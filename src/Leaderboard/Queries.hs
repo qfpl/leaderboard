@@ -36,9 +36,9 @@ import           Database.PostgreSQL.Simple               (Connection)
 import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
                                                            Player, PlayerT (..),
+                                                           RegisterPlayer (..),
                                                            leaderboardDb)
-import           Leaderboard.Types                        (LeaderboardError (..),
-                                                           RegisterPlayer (..))
+import           Leaderboard.Types                        (LeaderboardError (..))
 
 
 selectOrPersistJwk

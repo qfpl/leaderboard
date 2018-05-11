@@ -21,12 +21,13 @@ data DbInitError =
   deriving (Show)
 instance Exception DbInitError
 
-tables :: [Query]
-tables =
+tablesToTruncate :: [Query]
+tablesToTruncate =
   [ "ratings"
   , "players"
   , "ladders"
   , "playerToLadder"
+  , "matches"
   ]
 
 truncateTables
@@ -35,6 +36,8 @@ truncateTables
 truncateTables ci@ConnectInfo{..} = do
   conn <- connect ci
   let
+    -- I don't believe we can use parameterised queries here as the table names
+    -- don't get quoted correctly -- they get treated as string literals
     qs :: [Query]
-    qs = (\t -> "TRUNCATE TABLE \"" <> t <> "\"") <$> tables
+    qs = (\t -> "TRUNCATE TABLE \"" <> t <> "\"") <$> tablesToTruncate
   traverse_ (void . execute_ conn) qs

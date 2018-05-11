@@ -1,21 +1,24 @@
+{-# LANGUAGE DataKinds #-}
+
 module Leaderboard.TestClient where
 
+import           Data.Proxy             (Proxy)
 import           Servant.API            ((:<|>) ((:<|>)), getResponse)
+import           Servant.Auth           (JWT)
 import qualified Servant.Auth.Client    as SAC (Token (Token))
 import           Servant.Client         (ClientM, client)
 
 import           Leaderboard.API        (leaderboardAPI)
-import           Leaderboard.API.Player (AuthHeaders)
-import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
-                                         Token (..))
+import           Leaderboard.API.Player (AuthHeaders, PlayerAPI, playerAPI)
+import           Leaderboard.Schema     (RegisterPlayer)
+import           Leaderboard.Types      (Login, PlayerCount, Token (..))
 
 register      :: SAC.Token -> RegisterPlayer -> ClientM Token
 registerFirst :: RegisterPlayer -> ClientM (AuthHeaders Token)
 authenticate  :: Login -> ClientM (AuthHeaders Token)
 playerCount   :: ClientM PlayerCount
-
 (register :<|> registerFirst :<|> authenticate :<|> playerCount) =
-  client leaderboardAPI
+  client (playerAPI :: Proxy (PlayerAPI '[JWT]))
 
 toServantToken
   :: AuthHeaders Token

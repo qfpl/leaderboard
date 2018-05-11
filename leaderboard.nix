@@ -26,8 +26,8 @@ mkDerivation {
   testHaskellDepends = [
     base bytestring connection directory filepath hedgehog
     http-client-tls http-types lens mmorph postgresql-simple
-    postgresql-simple-url servant servant-auth-client servant-client
-    tasty tasty-hedgehog text tmp-postgres transformers
+    postgresql-simple-url servant servant-auth servant-auth-client
+    servant-client tasty tasty-hedgehog text tmp-postgres transformers
   ];
   license = stdenv.lib.licenses.bsd3;
 }

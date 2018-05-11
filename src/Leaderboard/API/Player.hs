@@ -17,6 +17,7 @@ import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
                                               verifyPass')
 import qualified Data.ByteString.Lazy.Char8  as BSL8
+import           Data.Proxy                  (Proxy (Proxy))
 import           Data.Semigroup              ((<>))
 import qualified Data.Text                   as T
 import           Data.Text.Encoding          (encodeUtf8)
@@ -33,18 +34,20 @@ import           Leaderboard.Env             (HasDbConnPool, withConn)
 import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
-import           Leaderboard.Schema          (Player, PlayerT (..))
+import           Leaderboard.Schema          (Player, PlayerT (..),
+                                              RegisterPlayer (..))
 import           Leaderboard.Types           (Login (..),
                                               PlayerCount (PlayerCount),
-                                              PlayerSession (..),
-                                              RegisterPlayer (..), Token (..))
+                                              PlayerSession (..), Token (..))
 
 type PlayerAPI auths =
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Token
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] (AuthHeaders Token)
-  -- TODO ajmccluskey: should probably make this return JSON out of consistency
   :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] (AuthHeaders Token)
   :<|> "player-count" :> Get '[JSON] PlayerCount
+
+playerAPI :: Proxy (PlayerAPI auths)
+playerAPI = Proxy
 
 type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
 
