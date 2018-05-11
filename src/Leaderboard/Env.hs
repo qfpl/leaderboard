@@ -1,10 +1,12 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Leaderboard.Env where
 
 import           Control.Lens                (re, set, view)
 import           Control.Monad               (join)
+import           Control.Monad.Except         (MonadError, throwError)
 import           Control.Monad.Reader        (MonadReader, asks)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Hash                 (Digest, SHA256)
@@ -15,6 +17,10 @@ import           Crypto.JOSE                 (JWK,
 import           Data.Pool                   (Pool, withResource)
 import           Data.Text.Strict.Lens       (utf8)
 import           Database.PostgreSQL.Simple  (Connection)
+import           Servant                     (ServantErr, err401, errBody)
+import           Servant.Auth.Server         (AuthResult (..))
+
+import           Leaderboard.Types           (PlayerSession (..))
 
 data Env =
   Env
@@ -52,4 +58,16 @@ genJwk = do
     h = view thumbprint jwk' :: Digest SHA256
     kid = view (re (base64url . digest) . utf8) h
   pure $ set jwkKid (Just kid) jwk'
+
+asPlayer
+  :: MonadError ServantErr m
+  => AuthResult PlayerSession
+  -> (Int -> m a)
+  -> m a
+asPlayer arp f =
+  case arp of
+    Authenticated psId -> f $ _psId psId
+    BadPassword -> throwError err401
+    NoSuchUser -> throwError err401
+    Indefinite -> throwError $ err401 { errBody = "No valid auth method found" }
 

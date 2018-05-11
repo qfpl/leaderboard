@@ -31,7 +31,7 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               CookieSettings, JWTSettings,
                                               SetCookie, acceptLogin, makeJWT)
 
-import           Leaderboard.Env             (HasDbConnPool, withConn)
+import           Leaderboard.Env             (HasDbConnPool, withConn, asPlayer)
 import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
@@ -57,11 +57,11 @@ matchServer
      , MonadLog Label m
      )
   => ServerT (MatchAPI auths) m
-matchServer _arp =
-        addMatch
-  :<|> listMatches
-  :<|> deleteMatch
-  :<|> editMatch
+matchServer arp =
+        addMatch arp
+  :<|> listMatches arp
+  :<|> deleteMatch arp
+  :<|> editMatch arp
 
 addMatch
   :: ( HasDbConnPool r
@@ -70,25 +70,13 @@ addMatch
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => RqMatch
+  => AuthResult PlayerSession
+  -> RqMatch
   -> m NoContent
-addMatch match =
-  undefined
-  -- withLabel (Label "/register") $
-  -- case arp of
-  --   Authenticated PlayerSession{..} -> do
-  --     ePlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn _psId
-  --     case ePlayer of
-  --       Left e -> do
-  --         Log.info $ "Failed authentication: " <> T.pack (show e)
-  --         throwError err401
-  --       Right Player{..} ->
-  --         if _playerIsAdmin
-  --           then (makeToken jwts <=< playerId <=< insertPlayer') rp
-  --           else throwError $ err401 {errBody = "Must be an admin to register a new player"}
-  --   ar ->  do
-  --     Log.info $ "Failed authentication: " <> T.pack (show ar)
-  --     throwError $ err401 {errBody = BSL8.pack (show ar)}
+addMatch arp match =
+  asPlayer arp $ \_pId ->
+  withLabel (Label "/matches/add") $ do
+    undefined --insertMatch match
 
 listMatches
   :: ( HasDbConnPool r
@@ -97,7 +85,8 @@ listMatches
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => m [Match]
+  => AuthResult PlayerSession
+  -> m [Match]
 listMatches =
   undefined
 
@@ -108,7 +97,8 @@ deleteMatch
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => MatchId
+  => AuthResult PlayerSession
+  -> MatchId
   -> m NoContent
 deleteMatch =
   undefined
@@ -120,7 +110,8 @@ editMatch
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => MatchId
+  => AuthResult PlayerSession
+  -> MatchId
   -> RqMatch
   -> m NoContent
 editMatch =

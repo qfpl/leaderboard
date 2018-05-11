@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 
@@ -9,13 +8,16 @@ import           Control.Exception          (Exception, SomeException,
                                              fromException, tryJust)
 import           Data.Maybe                 (isJust)
 import           Database.PostgreSQL.Simple (FormatError (..), SqlError (..))
-import           Leaderboard.Types          (LeaderboardError (PostgresError),
-                                             PostgresException (..))
 
-pgExceptionToError
+data PostgresException =
+    PgSqlError SqlError
+  | PgFormatError FormatError
+  deriving (Eq, Show)
+
+tryJustPg
   :: IO a
-  -> IO (Either LeaderboardError a)
-pgExceptionToError =
+  -> IO (Either PostgresException a)
+tryJustPg =
   tryJust fromPgException
   where
     fromPgException se
@@ -36,6 +38,6 @@ toPgError
      Exception e
   => SomeException
   -> (e -> PostgresException)
-  -> Maybe LeaderboardError
+  -> Maybe PostgresException
 toPgError se f =
-  PostgresError . f <$> fromException se
+  f <$> fromException se

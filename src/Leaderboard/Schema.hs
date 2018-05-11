@@ -17,11 +17,10 @@ import           Database.Beam.Migrate       (CheckedDatabaseSettings,
 import           Database.Beam.Migrate.Types (executeMigration)
 import           Database.Beam.Postgres
 
-import           Database.PgErrors           (pgExceptionToError)
+import           Database.PgErrors           (tryJustPg, PostgresException)
 import qualified Leaderboard.Schema.V_0_0_1  as V_0_0_1 (migration)
 
 import           Leaderboard.Schema.V_0_0_1  hiding (migration)
-import           Leaderboard.Types           (LeaderboardError (..))
 
 migration :: MigrationSteps PgCommandSyntax () (CheckedDatabaseSettings Postgres LeaderboardDb)
 migration =
@@ -32,10 +31,10 @@ leaderboardDb = unCheckDatabase $ evaluateDatabase migration
 
 createSchema
   :: Connection
-  -> IO (Either LeaderboardError ())
+  -> IO (Either PostgresException ())
 createSchema conn =
   let
     exeMigration = executeMigration runNoReturn (V_0_0_1.migration ())
   in
-    pgExceptionToError . void $ withDatabaseDebug putStrLn conn exeMigration
+    tryJustPg . void $ withDatabaseDebug putStrLn conn exeMigration
 

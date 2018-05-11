@@ -30,7 +30,6 @@ import           Data.Text.Lazy                           (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding                  as TLE
 import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
-import           Database.PgErrors                        (pgExceptionToError)
 import           Database.PostgreSQL.Simple               (Connection)
 
 import           Leaderboard.Schema                       (JwkT (..),
@@ -38,7 +37,7 @@ import           Leaderboard.Schema                       (JwkT (..),
                                                            Player, PlayerT (..),
                                                            RegisterPlayer (..),
                                                            leaderboardDb)
-import           Leaderboard.Types                        (LeaderboardError (..))
+import           Leaderboard.Types                        (LeaderboardError (..), tryJustPgError)
 
 
 selectOrPersistJwk
@@ -71,7 +70,7 @@ insertJwk conn jwk = do
       Jwk { _jwkId = B.Auto Nothing
           , _jwkJwk = toStrict . encodeToLazyText $ jwk'
           }
-  pgExceptionToError . void $
+  tryJustPgError . void $
     insertValues conn (_leaderboardJwk leaderboardDb) [dbJwk]
 
 selectPlayerCount

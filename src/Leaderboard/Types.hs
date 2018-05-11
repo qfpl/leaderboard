@@ -6,13 +6,16 @@
 module Leaderboard.Types where
 
 import           Control.Lens               (Lens', lens, makeLenses)
+import           Control.Monad              ((<=<))
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, ToJSON, object,
                                              parseJSON, toJSON, withObject,
                                              (.:), (.=))
+import           Data.Bifunctor             (first)
 import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
+import           Database.PgErrors          (PostgresException, tryJustPg)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
@@ -48,10 +51,12 @@ data LeaderboardError =
   | NoResult
   deriving (Eq, Show)
 
-data PostgresException =
-    PgSqlError Pg.SqlError
-  | PgFormatError Pg.FormatError
-  deriving (Eq, Show)
+-- | Run an IO action, catch postgres exceptions, and wrap them up as a LeaderboardError.
+tryJustPgError
+  :: IO a
+  -> IO (Either LeaderboardError a)
+tryJustPgError =
+  pure . first PostgresError <=< tryJustPg
 
 data Login
   = Login
@@ -62,6 +67,9 @@ data Login
 instance FromJSON Login
 instance ToJSON Login
 
+-- | Newtype around the Int for a player's PlayerId. When we move to a newer
+-- version of beam we can hopefully use a PlayerId directly as it won't be
+-- wrapping a Maybe as it does now (via Auto).
 newtype PlayerSession
   = PlayerSession { _psId :: Int }
     deriving (Eq, Generic, Show)
