@@ -8,7 +8,6 @@ import           Servant.Auth           (JWT)
 import qualified Servant.Auth.Client    as SAC (Token (Token))
 import           Servant.Client         (ClientM, client)
 
-import           Leaderboard.API        (leaderboardAPI)
 import           Leaderboard.API.Player (AuthHeaders, PlayerAPI, playerAPI)
 import           Leaderboard.Schema     (RegisterPlayer)
 import           Leaderboard.Types      (Login, PlayerCount, Token (..))

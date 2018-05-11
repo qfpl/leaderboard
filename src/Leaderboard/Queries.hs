@@ -8,13 +8,16 @@
 
 module Leaderboard.Queries
   ( selectOrPersistJwk
+  -- * Player
   , selectPlayerCount
   , selectPlayerById
   , selectPlayerByEmail
   , insertPlayer
+  -- * Matche
+  , insertMatch
   ) where
 
-import           Control.Lens                             ()
+import           Control.Lens                             ((^?), _Just)
 import           Control.Monad                            (void)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
@@ -32,12 +35,17 @@ import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
 import           Database.PostgreSQL.Simple               (Connection)
 
+import           Leaderboard.Lens                         (_Auto)
 import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
-                                                           Player, PlayerT (..),
+                                                           MatchT (..), Player,
+                                                           PlayerT (..),
+                                                           leaderboardDb,
+                                                           matchId)
+import           Leaderboard.Types                        (LeaderboardError (..),
                                                            RegisterPlayer (..),
-                                                           leaderboardDb)
-import           Leaderboard.Types                        (LeaderboardError (..), tryJustPgError)
+                                                           RqMatch (..),
+                                                           tryJustPgError)
 
 
 selectOrPersistJwk
@@ -108,6 +116,17 @@ insertPlayer conn LeaderboardRegistration{..} = do
     isAdmin = fromMaybe False _lbrIsAdmin
     newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail ePass isAdmin
   listToMaybe <$> insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
+
+-- TODO ajmccluskey: return MatchId when it's not Auto (i.e. Maybe)
+insertMatch
+  :: Connection
+  -> RqMatch
+  -> IO (Maybe Int)
+insertMatch conn RqMatch{..} = do
+  let
+    _matchId = B.Auto Nothing
+  ms <- insertValues conn (_leaderboardMatches leaderboardDb) [Match{..}]
+  pure $ listToMaybe ms ^? _Just . matchId . _Auto
 
 -- Unsure of the types for the following, and the inferred types cause compiler errors
 insertValues conn table vals =

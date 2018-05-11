@@ -296,62 +296,9 @@ migration () =
       (field "jwk" (varchar Nothing) notNull)
     )
 
--------------------------------------------------------------------------------
--- These are user facing types that relate to types from the schema, so we keep
--- them together
--------------------------------------------------------------------------------
-
--- TODO ajmccluskey: newtype these!
-data RegisterPlayer
-  = LeaderboardRegistration
-    { _lbrEmail    :: Text
-    , _lbrName     :: Text
-    , _lbrPassword :: Text
-    , _lbrIsAdmin  :: Maybe Bool
-    }
-  deriving (Eq, Generic, Show)
-
-instance FromJSON RegisterPlayer where
-  parseJSON =
-    withObject "RegisterPlayer" $ \v ->
-      LeaderboardRegistration <$>
-      v .: "email" <*>
-      v .: "name" <*>
-      v .: "password" <*>
-      v .: "isAdmin"
-
-instance ToJSON RegisterPlayer where
-  toJSON LeaderboardRegistration{..} =
-    object
-    [ "email" .= _lbrEmail
-    , "name" .= _lbrName
-    , "password" .= _lbrPassword
-    , "isAdmin" .= _lbrIsAdmin
-    ]
-
--- | Match used in requests.
-data RqMatch
-  = RqMatch
-  { _matchPlayer1      :: PlayerId
-  , _matchPlayer2      :: PlayerId
-  , _matchPlayer1Score :: Int
-  , _matchPlayer2Score :: Int
-  , _matchTime         :: UTCTime
-  }
-  deriving (Eq, Show)
-
-instance FromJSON RqMatch where
-  parseJSON =
-    withObject "RqMatch" $ \v ->
-      RqMatch
-      <$> v .: "player1"
-      <*> v .: "player2"
-      <*> v .:  "player1Score"
-      <*> v .:  "player2Score"
-      <*> v .:  "time"
-
 makeLenses ''LeaderboardDb
 makeLenses ''PlayerT
 makeLenses ''RatingT
 makeLenses ''LadderT
 makeLenses ''PlayerToLadderT
+makeLenses ''MatchT

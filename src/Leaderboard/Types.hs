@@ -15,11 +15,14 @@ import           Data.Bifunctor             (first)
 import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
+import           Data.Time                  (UTCTime)
 import           Database.PgErrors          (PostgresException, tryJustPg)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
 import           Servant                    (ServantErr)
 import           Servant.Auth.Server        (FromJWT, ToJWT)
+
+import           Leaderboard.Schema         (PlayerId)
 
 data Command
   = RunApp
@@ -101,3 +104,52 @@ instance FromJSON Token where
 instance ToJSON Token where
   toJSON (Token t)=
     object ["token" .= decodeUtf8 t]
+
+-- TODO ajmccluskey: newtype these!
+data RegisterPlayer
+  = LeaderboardRegistration
+    { _lbrEmail    :: Text
+    , _lbrName     :: Text
+    , _lbrPassword :: Text
+    , _lbrIsAdmin  :: Maybe Bool
+    }
+  deriving (Eq, Generic, Show)
+
+instance FromJSON RegisterPlayer where
+  parseJSON =
+    withObject "RegisterPlayer" $ \v ->
+      LeaderboardRegistration <$>
+      v .: "email" <*>
+      v .: "name" <*>
+      v .: "password" <*>
+      v .: "isAdmin"
+
+instance ToJSON RegisterPlayer where
+  toJSON LeaderboardRegistration{..} =
+    object
+    [ "email" .= _lbrEmail
+    , "name" .= _lbrName
+    , "password" .= _lbrPassword
+    , "isAdmin" .= _lbrIsAdmin
+    ]
+
+-- | Match used in requests.
+data RqMatch
+  = RqMatch
+  { _matchPlayer1      :: PlayerId
+  , _matchPlayer2      :: PlayerId
+  , _matchPlayer1Score :: Int
+  , _matchPlayer2Score :: Int
+  , _matchTime         :: UTCTime
+  }
+  deriving (Eq, Show)
+
+instance FromJSON RqMatch where
+  parseJSON =
+    withObject "RqMatch" $ \v ->
+      RqMatch
+      <$> v .: "player1"
+      <*> v .: "player2"
+      <*> v .:  "player1Score"
+      <*> v .:  "player2Score"
+      <*> v .:  "time"
