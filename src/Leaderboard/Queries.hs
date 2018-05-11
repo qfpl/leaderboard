@@ -15,6 +15,7 @@ module Leaderboard.Queries
   , insertPlayer
   -- * Matche
   , insertMatch
+  , selectMatches
   ) where
 
 import           Control.Lens                             ((^?), _Just)
@@ -36,7 +37,7 @@ import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
 import           Database.PostgreSQL.Simple               (Connection)
 
 import           Leaderboard.Lens                         (_Auto)
-import           Leaderboard.Schema                       (JwkT (..),
+import           Leaderboard.Schema                       (JwkT (..), Match,
                                                            LeaderboardDb (..),
                                                            MatchT (..), Player,
                                                            PlayerT (..),
@@ -128,6 +129,12 @@ insertMatch conn RqMatch{..} = do
     noIdError = Left . DbError $ "No match ID returned on insert"
   ms <- tryJustPgError $ insertValues conn (_leaderboardMatches leaderboardDb) [Match{..}]
   pure $ maybe noIdError Right . (^? _Just . matchId . _Auto) . listToMaybe =<< ms
+
+selectMatches
+  :: Connection
+  -> IO [Match]
+selectMatches conn =
+  selectList conn $ B.all_ (_leaderboardMatches leaderboardDb)
 
 -- Unsure of the types for the following, and the inferred types cause compiler errors
 insertValues conn table vals =

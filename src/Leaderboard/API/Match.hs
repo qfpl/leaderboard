@@ -20,9 +20,10 @@ import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
 import qualified Data.ByteString.Lazy.Char8  as BSL8
 import           Data.Maybe                  (fromMaybe)
 import           Data.Semigroup              ((<>))
-import           Data.Text                   (pack)
+import           Data.Text                   (Text, pack)
 import           Data.Text.Encoding          (encodeUtf8)
 import           Database.Beam               (unAuto)
+import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
                                               DeleteNoContent, Get, Header,
                                               Headers, JSON, NoContent, Post,
@@ -34,7 +35,7 @@ import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
                                               SetCookie, acceptLogin, makeJWT)
 
 import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
-import           Leaderboard.Queries         (insertMatch, insertPlayer,
+import           Leaderboard.Queries         (selectMatches, insertMatch, insertPlayer,
                                               selectPlayerByEmail,
                                               selectPlayerById,
                                               selectPlayerCount)
@@ -79,15 +80,13 @@ addMatch
   -> RqMatch
   -> m Int
 addMatch arp match =
-  asPlayer arp $ \_pId ->
-  withLabel (Label "/matches/add") $
-  withConn $ \conn -> do
-    let
-      bad e = do
-        Log.error $ "Error inserting player: " <> (pack . show $ e)
-        throwError $ err500 {errBody = "Insert of match failed"}
-    eId <- liftIO $ insertMatch conn match
-    either bad pure eId
+  withAuthConnAndLog arp "/matches/add" $ \conn -> do
+  let
+    bad e = do
+      Log.error $ "Error inserting player: " <> (pack . show $ e)
+      throwError $ err500 {errBody = "Insert of match failed"}
+  eId <- liftIO $ insertMatch conn match
+  either bad pure eId
 
 listMatches
   :: ( HasDbConnPool r
@@ -98,8 +97,14 @@ listMatches
      )
   => AuthResult PlayerSession
   -> m [Match]
-listMatches =
-  undefined
+listMatches arp =
+  withAuthConnAndLog arp "/matches/list" $ \conn -> do
+  let
+    bad e = do
+      Log.error $ "Error retrieving matches: " <> (pack . show $ e)
+      throwError $ err500 { errBody = "Error retrieving matches" }
+  el <- liftIO . tryJustPgError $ selectMatches conn
+  either bad pure el
 
 deleteMatch
   :: ( HasDbConnPool r
@@ -127,3 +132,19 @@ editMatch
   -> m NoContent
 editMatch =
   undefined
+
+withAuthConnAndLog
+  :: ( MonadError ServantErr m
+     , MonadLog Label m
+     , HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     )
+  => AuthResult PlayerSession
+  -> Text
+  -> (Connection -> m a)
+  -> m a
+withAuthConnAndLog arp label f =
+  asPlayer arp $ \_pId ->
+  withLabel (Label label) $
+  withConn $ \conn -> f conn
