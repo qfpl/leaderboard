@@ -7,38 +7,48 @@
 
 module Leaderboard.API.Player where
 
-import           Control.Monad.Except        (MonadError, throwError)
-import           Control.Monad.IO.Class      (liftIO)
-import           Control.Monad.Log           (MonadLog)
-import qualified Control.Monad.Log           as Log
-import           Control.Monad.Log.Label     (Label (Label), withLabel)
+import           Control.Monad.Except                   (MonadError, throwError)
+import           Control.Monad.IO.Class                 (liftIO)
+import           Control.Monad.Log                      (MonadLog)
+import qualified Control.Monad.Log                      as Log
+import           Control.Monad.Log.Label                (Label (Label),
+                                                         withLabel)
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
-                                              verifyPass')
-import qualified Data.ByteString.Lazy.Char8  as BSL8
-import           Data.Proxy                  (Proxy (Proxy))
-import           Data.Semigroup              ((<>))
-import qualified Data.Text                   as T
-import           Data.Text.Encoding          (encodeUtf8)
-import           Database.Beam               (unAuto)
-import           Servant                     ((:<|>) ((:<|>)), (:>), Get,
-                                              Header, Headers, JSON, Post,
-                                              ReqBody, ServantErr, ServerT,
-                                              err401, err403, err500, errBody)
-import           Servant.Auth.Server         (Auth, AuthResult (Authenticated),
-                                              CookieSettings, JWTSettings,
-                                              SetCookie, acceptLogin, makeJWT)
+import           Control.Monad.Trans.Control            (MonadBaseControl)
+import           Crypto.Scrypt                          (EncryptedPass (..),
+                                                         Pass (..), verifyPass')
+import           Data.Bool                              (bool)
+import qualified Data.ByteString.Lazy.Char8             as BSL8
+import           Data.Proxy                             (Proxy (Proxy))
+import           Data.Semigroup                         ((<>))
+import qualified Data.Text                              as T
+import           Data.Text.Encoding                     (encodeUtf8)
+import           Database.Beam                          (unAuto)
+import           Database.PostgreSQL.Simple.Transaction (withTransactionSerializable)
+import           Servant                                ((:<|>) ((:<|>)), (:>),
+                                                         Get, Header, Headers,
+                                                         JSON, Post, ReqBody,
+                                                         ServantErr, ServerT,
+                                                         err401, err403, err500,
+                                                         errBody)
+import           Servant.Auth.Server                    (Auth, AuthResult (Authenticated),
+                                                         CookieSettings,
+                                                         JWTSettings, SetCookie,
+                                                         acceptLogin, makeJWT)
 
-import           Leaderboard.Env             (HasDbConnPool, withConn)
-import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
-                                              selectPlayerById,
-                                              selectPlayerCount)
-import           Leaderboard.Schema          (Player, PlayerT (..))
-import           Leaderboard.Types           (Login (..),
-                                              PlayerCount (PlayerCount),
-                                              PlayerSession (..),
-                                              RegisterPlayer (..), Token (..))
+import           Leaderboard.Env                        (HasDbConnPool,
+                                                         asPlayer, withConn)
+import           Leaderboard.Queries                    (insertPlayer,
+                                                         selectPlayerByEmail,
+                                                         selectPlayerById,
+                                                         selectPlayerCount)
+import           Leaderboard.Schema                     (Player, PlayerT (..))
+import           Leaderboard.Types                      (LeaderboardError (PlayerExists),
+                                                         Login (..),
+                                                         PlayerCount (PlayerCount),
+                                                         PlayerSession (..),
+                                                         RegisterPlayer (..),
+                                                         Token (..))
 
 type PlayerAPI auths =
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Token
@@ -80,20 +90,16 @@ register
   -> m Token
 register jwts arp rp =
   withLabel (Label "/register") $
-  case arp of
-    Authenticated PlayerSession{..} -> do
-      ePlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn _psId
-      case ePlayer of
-        Left e -> do
-          Log.info $ "Failed authentication: " <> T.pack (show e)
-          throwError err401
-        Right Player{..} ->
-          if _playerIsAdmin
-            then (makeToken jwts <=< playerId <=< insertPlayer') rp
-            else throwError $ err401 {errBody = "Must be an admin to register a new player"}
-    ar ->  do
-      Log.info $ "Failed authentication: " <> T.pack (show ar)
-      throwError $ err401 {errBody = BSL8.pack (show ar)}
+  asPlayer arp $ \psId -> do
+    ePlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn psId
+    case ePlayer of
+      Left e -> do
+        Log.info $ "Failed authentication: " <> T.pack (show e)
+        throwError $ err401 { errBody = "Please try reauthenticating" }
+      Right Player{..} ->
+        if _playerIsAdmin
+          then (makeToken jwts <=< playerId <=< insertPlayer') rp
+          else throwError $ err401 {errBody = "Must be an admin to register a new player"}
 
 registerFirst
   :: ( HasDbConnPool r
@@ -108,14 +114,22 @@ registerFirst
   -> m (AuthHeaders Token)
 registerFirst cs jwts rp =
   withLabel (Label "/register-first") $ do
-  let rp' = rp {_lbrIsAdmin = Just True}
-  numPlayers' <- withConn $ liftIO . selectPlayerCount
-  numPlayers <- either (const $ throwError err500) pure numPlayers'
-  if numPlayers < 1
-    then (authenticatePlayerId cs jwts <=< playerId <=< insertPlayer') rp'
-    else do
-      Log.info $ "registerFirst called but " <> T.pack (show numPlayers) <> " players already registered"
+  -- Possible race condition between checking count and inserting -- transaction it
+  ep <- withConn $ \conn -> liftIO . withTransactionSerializable conn $ do
+    let
+      rp' = rp {_lbrIsAdmin = Just True}
+      insert = bool (pure . Left $ PlayerExists) (insertPlayer conn rp') . (< 1)
+    numPlayers <- selectPlayerCount conn
+    either (pure . Left) insert numPlayers
+  case ep of
+    Left PlayerExists -> do
+      Log.info "registerFirst called but player(s) already registered"
       throwError $ err403 { errBody = "First user already added." }
+    Left e -> do
+      Log.error . T.pack . show $ e
+      throwError err500
+    Right p ->
+      playerId p >>= authenticatePlayerId cs jwts
 
 authenticate
   :: ( HasDbConnPool r
