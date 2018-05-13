@@ -20,6 +20,7 @@ import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
 
 import           Leaderboard.Main              (doTheLeaderboard)
+import           Leaderboard.MatchTests        (matchTests)
 import           Leaderboard.RegistrationTests (registrationTests)
 import           Leaderboard.TestServer        (truncateTables)
 import           Leaderboard.Types             (ApplicationOptions (..),
@@ -49,6 +50,7 @@ allTheTests
 allTheTests tt env =
   testGroup "leaderboard"
   [ registrationTests tt env
+  , matchTests tt env
   ]
 
 withDb

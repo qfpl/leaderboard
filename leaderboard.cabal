@@ -75,6 +75,7 @@ test-suite leaderboard-tests
   hs-source-dirs:      test
   main-is:             Test.hs
   build-depends:       base >=4.9 && <4.11
+                     , beam-core >=0.5.0.0 && <0.6
                      , bytestring >=0.9.1 && <0.11
                      , connection >= 0.2 && <0.3
                      , directory >=1.0.0.0 && <1.4
@@ -91,9 +92,10 @@ test-suite leaderboard-tests
                      , servant-auth >=0.3 && <0.4
                      , servant-auth-client >=0.3 && <0.4
                      , servant-client >=0.11 && <0.14
-                     , text >=1.2.2.2 && <1.3
                      , tasty >=0.11 && <1.1
                      , tasty-hedgehog >=0.1 && <0.3
+                     , text >=1.2.2.2 && <1.3
+                     , time >=1.5 && <1.10
                      , tmp-postgres >=0.2 && <0.3
                      , transformers >=0.2 && <0.6
   default-language:    Haskell2010

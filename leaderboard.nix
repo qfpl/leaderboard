@@ -24,10 +24,11 @@ mkDerivation {
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [
-    base bytestring connection directory filepath hedgehog
+    base beam-core bytestring connection directory filepath hedgehog
     http-client-tls http-types lens mmorph postgresql-simple
     postgresql-simple-url servant servant-auth servant-auth-client
-    servant-client tasty tasty-hedgehog text tmp-postgres transformers
+    servant-client tasty tasty-hedgehog text time tmp-postgres
+    transformers
   ];
   license = stdenv.lib.licenses.bsd3;
 }
