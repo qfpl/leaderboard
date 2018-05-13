@@ -18,29 +18,31 @@ module Leaderboard.Queries
   , selectMatches
   ) where
 
-import           Control.Lens                             ((^?), _Just)
+import           Control.Lens                             ((^?), _head)
 import           Control.Monad                            (void)
+import           Control.Monad.Except                     (ExceptT (ExceptT), runExceptT)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
                                                            Pass (..),
                                                            encryptPassIO')
 import           Data.Aeson                               (eitherDecode')
 import           Data.Aeson.Text                          (encodeToLazyText)
-import           Data.Maybe                               (fromMaybe,
-                                                           listToMaybe)
-import           Data.Text                                (Text)
+import           Data.Maybe                               (fromMaybe)
+import           Data.Semigroup                           ((<>))
+import           Data.Text                                (Text, pack)
 import qualified Data.Text.Encoding                       as TE
 import           Data.Text.Lazy                           (fromStrict, toStrict)
 import qualified Data.Text.Lazy.Encoding                  as TLE
 import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
 import           Database.PostgreSQL.Simple               (Connection)
+import           Database.PostgreSQL.Simple.Transaction   (withTransactionSerializable)
 
 import           Leaderboard.Lens                         (_Auto)
-import           Leaderboard.Schema                       (JwkT (..), Match,
+import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
-                                                           MatchT (..), Player,
-                                                           PlayerT (..),
+                                                           Match, MatchT (..),
+                                                           Player, PlayerT (..),
                                                            leaderboardDb,
                                                            matchId)
 import           Leaderboard.Types                        (LeaderboardError (..),
@@ -110,13 +112,21 @@ selectPlayerByEmail conn email =
 insertPlayer
   :: Connection
   -> RegisterPlayer
-  -> IO (Maybe Player)
-insertPlayer conn LeaderboardRegistration{..} = do
+  -> IO (Either LeaderboardError Player)
+insertPlayer conn rp@LeaderboardRegistration{..} = do
   (EncryptedPass ePass) <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
   let
     isAdmin = fromMaybe False _lbrIsAdmin
     newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail ePass isAdmin
-  listToMaybe <$> insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
+    noPlayerError = Left . DbError $ "Error inserting player: " <> pack (show rp)
+  ep <- withTransactionSerializable conn $ do
+    ep <- selectPlayerByEmail conn _lbrEmail
+    case ep of
+      Left NoResult ->
+        tryJustPgError $ insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
+      Left e -> pure (Left e)
+      Right _ -> pure . Left $ PlayerExists
+  pure $ maybe noPlayerError Right . (^? _head) =<< ep
 
 -- TODO ajmccluskey: return MatchId when it's not Auto (i.e. Maybe)
 insertMatch
@@ -128,7 +138,7 @@ insertMatch conn RqMatch{..} = do
     _matchId = B.Auto Nothing
     noIdError = Left . DbError $ "No match ID returned on insert"
   ms <- tryJustPgError $ insertValues conn (_leaderboardMatches leaderboardDb) [Match{..}]
-  pure $ maybe noIdError Right . (^? _Just . matchId . _Auto) . listToMaybe =<< ms
+  pure $ maybe noIdError Right . (^? _head . matchId . _Auto) =<< ms
 
 selectMatches
   :: Connection

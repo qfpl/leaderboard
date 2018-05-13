@@ -194,12 +194,11 @@ insertPlayer' rp =
   withLabel (Label "insertPlayer") $ do
   Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
   let
-    throwX msg = do
-      Log.error . (msg <>) . T.pack . show $ rp
+    throwNoPlayer e = do
+      Log.error . T.pack . show $ e
       throwError $ err500 {errBody = "Error registering player"}
-    throwNoPlayer = throwX "Inserting player into database failed -- `Nothing` returned for "
-  mp <- withConn $ \conn -> liftIO $ insertPlayer conn rp
-  maybe throwNoPlayer pure mp
+  ep <- withConn $ \conn -> liftIO $ insertPlayer conn rp
+  either throwNoPlayer pure ep
 
 getPlayerCount
   :: ( HasDbConnPool r

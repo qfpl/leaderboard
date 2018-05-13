@@ -52,6 +52,7 @@ data LeaderboardError =
   | JwkDecodeError
   | DbError Text
   | NoResult
+  | PlayerExists
   deriving (Eq, Show)
 
 -- | Run an IO action, catch postgres exceptions, and wrap them up as a LeaderboardError.
