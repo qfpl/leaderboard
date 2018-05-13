@@ -197,7 +197,8 @@ cRegFirstForbidden env =
   in
     Command gen execute [
       Require $ \(RegisterState ps _as) _input -> not (null ps)
-    , Ensure $ \_sOld _sNew _input se ->
+    , Ensure $ \sOld sNew _input se -> do
+        sOld === sNew
         case se of
           FailureResponse{..} -> responseStatus === forbidden403
           _                   -> failure
@@ -234,6 +235,8 @@ cRegister env =
               _         -> as
         in
           RegisterState newPlayers newAdmins
+    , Ensure $ \(RegisterState psOld _asOld) (RegisterState psNew _asNew) _input _output ->
+        length psNew === length psOld + 1
     ]
 
 initialState
