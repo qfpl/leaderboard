@@ -20,7 +20,6 @@ module Leaderboard.Queries
 
 import           Control.Lens                             ((^?), _head)
 import           Control.Monad                            (void)
-import           Control.Monad.Except                     (ExceptT (ExceptT), runExceptT)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
                                                            Pass (..),
