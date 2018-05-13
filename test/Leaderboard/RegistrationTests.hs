@@ -1,12 +1,17 @@
-{-# LANGUAGE KindSignatures    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE KindSignatures     #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Leaderboard.RegistrationTests
   ( registrationTests
   ) where
 
 import           Control.Monad.IO.Class    (MonadIO, liftIO)
+import           Data.Bool                 (bool)
+import qualified Data.Map                  as M
+import           Data.Semigroup            ((<>))
+import qualified Data.Set                  as S
 import           Data.Text                 (Text)
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Auth.Client       (Token)
@@ -14,8 +19,9 @@ import           Servant.Client            (ClientEnv, ClientM,
                                             ServantError (..), runClientM)
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            Gen, HTraversable (htraverse),
-                                            MonadTest, PropertyT, annotateShow,
+                                            Eq1, Gen, HTraversable (htraverse),
+                                            PropertyT, Show1, Var (Var),
+                                            annotateShow, assert, concrete,
                                             executeSequential, failure, forAll,
                                             property, (===))
 import qualified Hedgehog.Gen              as Gen
@@ -24,10 +30,22 @@ import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.TestClient    (getPlayerCount, register,
-                                            registerFirst, toServantToken)
+import           Leaderboard.TestClient    (fromLbToken, fromLbToken',
+                                            getPlayerCount, register,
+                                            registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
                                             RegisterPlayer (..))
+
+data PlayerWithToken v =
+  PlayerWithToken
+  { _pwtEmail    :: Text
+  , _pwtName     :: Text
+  , _pwtPassword :: Text
+  , _pwtIsAdmin  :: Maybe Bool
+  , _pwtToken    :: Var Token v
+  }
+  deriving (Eq, Show)
+-- makeLenses ''PlayerWithToken
 
 registrationTests
   :: IO ()
@@ -64,22 +82,78 @@ genNonEmptyUnicode
 genNonEmptyUnicode =
   Gen.text (Range.linear 1 100) Gen.unicode
 
+genAdminToken
+  :: RegisterState v
+  -> Maybe (Gen (Var Token v))
+genAdminToken (RegisterState ps as) =
+  let
+    -- Emails in admin _must_ be a subset of those in players. Without a Traversable
+    -- instance for Gen I couldn't make this be not partial.
+    f = _pwtToken . (M.!) ps
+    mGEmail =  bool (pure . Gen.element . S.toList $ as) Nothing $ S.null as
+  in
+    fmap (fmap f) mGEmail
+
+type PlayerMap v = M.Map Text (PlayerWithToken v)
+
 genRegPlayerRandomAdmin
-  :: Gen RegisterPlayer
-genRegPlayerRandomAdmin =
+  :: PlayerMap v
+  -> Gen RegisterPlayer
+genRegPlayerRandomAdmin ps =
   LeaderboardRegistration
-    <$> genNonEmptyUnicode
+    <$> Gen.filter (`S.notMember` M.keysSet ps) genNonEmptyUnicode
     <*> genNonEmptyUnicode
     <*> genNonEmptyUnicode
-    <*> (Just <$> Gen.bool)
+    <*> Gen.maybe Gen.bool
+
+mkPlayerWithToken
+  :: RegisterPlayer
+  -> Var Token v
+  -> PlayerWithToken v
+mkPlayerWithToken LeaderboardRegistration{..} _pwtToken =
+  let
+    _pwtEmail = _lbrEmail
+    _pwtName = _pwtPassword
+    _pwtPassword = _lbrPassword
+    _pwtIsAdmin = _lbrIsAdmin
+  in
+    PlayerWithToken{..}
+
+-- | Map emails to players and keep a set of admin emails
+data RegisterState (v :: * -> *) =
+  RegisterState (PlayerMap v) (S.Set Text)
+
+--------------------------------------------------------------------------------
+-- PLAYER COUNT
+--------------------------------------------------------------------------------
+
+data GetPlayerCount (v :: * -> *) =
+    GetPlayerCount
+  deriving (Eq, Show)
+instance HTraversable GetPlayerCount where
+  htraverse _ _ = pure GetPlayerCount
+
+cGetPlayerCount
+  :: ClientEnv
+  -> Command Gen (PropertyT IO) RegisterState
+cGetPlayerCount env =
+  let
+    gen _s = Just . pure $ GetPlayerCount
+    exe _i = successClient show env $ unPlayerCount <$> getPlayerCount
+  in
+    Command gen exe [
+      Ensure $ \(RegisterState ps as) _sNew _i c -> do
+        annotateShow ps
+        annotateShow as
+        length ps === fromIntegral c
+        assert $ length ps >= length as
+    ]
 
 --------------------------------------------------------------------------------
 -- REGISTER FIRST
 --------------------------------------------------------------------------------
-
-newtype RegisterState (v :: * -> *) =
-  RegisterState Integer
-  deriving (Eq, Show)
+deriving instance Show1 v => Show (RegisterState v)
+deriving instance Eq1 v => Eq (RegisterState v)
 
 newtype RegFirst (v :: * -> *) =
     RegFirst RegisterPlayer
@@ -98,24 +172,17 @@ cRegFirst
   -> Command Gen (PropertyT IO) RegisterState
 cRegFirst env =
   let
-    gen _s =
-       Just (RegFirst <$> genRegPlayerRandomAdmin)
+    gen (RegisterState ps _as) =
+      bool Nothing (Just $ RegFirst <$> genRegPlayerRandomAdmin ps) $ null ps
     execute (RegFirst rp) =
-      let
-        reg = registerFirst rp
-        pc = unPlayerCount <$> getPlayerCount
-      in
-        successClient show env $ (,,) <$> pc <*> reg <*> pc
+      let mkError = (("Should succeed with token, but got: " <>) . show)
+       in successClient mkError env . fmap fromLbToken' $ registerFirst rp
   in
     Command gen execute [
-      Require $ \(RegisterState s) _input -> s == 0
-    , Update $ \_s _c _out -> RegisterState 1
-    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (cb, _r, ca) -> do
-        annotateRegFirst sOld sNew cb ca
-        sOld === 0
-        sNew === 1
-        cb === 0
-        ca === 1
+      Require $ \(RegisterState ps _) _input -> null ps
+    , Update $ \_s (RegFirst lbr@LeaderboardRegistration{..}) t ->
+        RegisterState (M.singleton _lbrEmail (mkPlayerWithToken lbr t)) (S.singleton _lbrEmail)
+    , Ensure $ \_sOld (RegisterState psNew _) (RegFirst _rp) _t -> length psNew === 1
     ]
 
 cRegFirstForbidden
@@ -123,65 +190,56 @@ cRegFirstForbidden
   -> Command Gen (PropertyT IO) RegisterState
 cRegFirstForbidden env =
   let
-    gen _s = Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin
+    gen (RegisterState ps _as) =
+      bool (Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin ps) Nothing $ null ps
     execute (RegFirstForbidden rp) =
-      let
-        reg = failureClient (const "Should return 403") env $ registerFirst rp
-        pc = successClient show env $ unPlayerCount <$> getPlayerCount
-      in
-        (,,) <$> pc <*> reg <*> pc
+      failureClient (const "Should return 403") env $ registerFirst rp
   in
     Command gen execute [
-      Require $ \(RegisterState s) _input -> s > 0
-    , Update $ \s _c _out -> s
-    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (cb, se, ca) -> do
-        annotateRegFirst sOld sNew cb ca
-        sNew === sOld
-        cb === sOld
-        ca === sOld
+      Require $ \(RegisterState ps _as) _input -> not (null ps)
+    , Ensure $ \_sOld _sNew _input se ->
         case se of
           FailureResponse{..} -> responseStatus === forbidden403
           _                   -> failure
     ]
 
-annotateRegFirst
-  :: ( Show a , MonadTest m)
-  => a -> a -> a -> a -> m ()
-annotateRegFirst sOld sNew cb ca = do
-  annotateShow sOld
-  annotateShow sNew
-  annotateShow cb
-  annotateShow ca
-
-
 --------------------------------------------------------------------------------
 -- REGISTER
 --------------------------------------------------------------------------------
 
-newtype Register (v :: * -> *) =
-  Register RegisterPlayer
+data Register (v :: * -> *) =
+  Register RegisterPlayer (Var Token v)
   deriving (Eq, Show)
 instance HTraversable Register where
-  htraverse _ (Register rp) = pure (Register rp)
+  htraverse f (Register rp (Var gt)) = Register rp . Var <$> f gt
 
 cRegister
   :: ClientEnv
-  -> Token
   -> Command Gen (PropertyT IO) RegisterState
-cRegister env token =
+cRegister env =
   let
-    gen _s = Just (Register <$> genRegPlayerRandomAdmin)
-    execute (Register rp) =
-      let pc = unPlayerCount <$> getPlayerCount
-       in successClient show env $ (,) <$> register token rp <*> pc
+    gen rs@(RegisterState ps _as) =
+      (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminToken rs
+    execute (Register rp token) =
+      successClient show env . fmap fromLbToken $ register (concrete token) rp
   in
     Command gen execute [
-      Require $ \(RegisterState s) _input -> s > 0
-    , Update $ \(RegisterState n) _cmd _out -> RegisterState (n + 1)
-    , Ensure $ \(RegisterState sOld) (RegisterState sNew) _input (_, c) -> do
-        sNew === sOld + 1
-        c === sNew
+      Require $ \(RegisterState _ps as) _input -> not (null as)
+    , Update $ \(RegisterState ps as) (Register rp@LeaderboardRegistration{..} _rqToken) t ->
+        let
+          newPlayers = M.insert _lbrEmail (mkPlayerWithToken rp t) ps
+          newAdmins =
+            case _lbrIsAdmin of
+              Just True -> S.insert _lbrEmail as
+              _         -> as
+        in
+          RegisterState newPlayers newAdmins
     ]
+
+initialState
+  :: RegisterState (v :: * -> *)
+initialState =
+  RegisterState M.empty S.empty
 
 propRegFirst
   :: ClientEnv
@@ -189,10 +247,10 @@ propRegFirst
   -> TestTree
 propRegFirst env truncateTables =
   testProperty "register-first" . property $ do
-  let initialState = RegisterState 0
   liftIO truncateTables
+  let cs = ($ env) <$> [cRegFirst, cGetPlayerCount, cRegFirstForbidden]
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState $ ($ env) <$> [cRegFirst, cRegFirstForbidden]
+    Gen.sequential (Range.linear 1 100) initialState cs
   executeSequential initialState commands
 
 propRegister
@@ -201,17 +259,9 @@ propRegister
   -> TestTree
 propRegister env truncateTables =
   testProperty "register-counts" . property $ do
-  let
-    _lbrEmail = "test@qfpl.io" -- not a real email address
-    _lbrName = "test"
-    _lbrPassword = "password"
-    _lbrIsAdmin = Just True
-    newPlayer = LeaderboardRegistration{..}
-    initialState = RegisterState 1
-
   liftIO truncateTables
-  token <- fmap toServantToken . successClient show env $ registerFirst newPlayer
+  let cs = ($ env) <$> [cRegister, cRegFirst, cRegFirstForbidden, cGetPlayerCount]
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState [cRegister env token, cRegFirst env, cRegFirstForbidden env]
+    Gen.sequential (Range.linear 1 100) initialState cs
   executeSequential initialState commands
 

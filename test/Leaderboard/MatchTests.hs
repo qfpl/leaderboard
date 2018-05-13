@@ -20,7 +20,7 @@ import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.Schema     (PlayerId (..))
 import           Leaderboard.TestClient (getPlayerCount, register, registerFirst,
-                                         toServantToken)
+                                         fromLbToken')
 import           Leaderboard.Types      (RqMatch)
 
 matchTests

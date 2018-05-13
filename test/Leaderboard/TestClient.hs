@@ -19,8 +19,14 @@ getPlayerCount :: ClientM PlayerCount
 (register :<|> registerFirst :<|> authenticate :<|> getPlayerCount) =
   client (playerAPI :: Proxy (PlayerAPI '[JWT]))
 
-toServantToken
+fromLbToken
+  :: Token
+  -> SAC.Token
+fromLbToken =
+  SAC.Token . getToken
+
+fromLbToken'
   :: AuthHeaders Token
   -> SAC.Token
-toServantToken =
-  SAC.Token . getToken . getResponse
+fromLbToken' =
+  fromLbToken . getResponse
