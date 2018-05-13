@@ -24,7 +24,7 @@ import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.TestClient    (playerCount, register,
+import           Leaderboard.TestClient    (getPlayerCount, register,
                                             registerFirst, toServantToken)
 import           Leaderboard.Types         (PlayerCount (..),
                                             RegisterPlayer (..))
@@ -103,7 +103,7 @@ cRegFirst env =
     execute (RegFirst rp) =
       let
         reg = registerFirst rp
-        pc = getPlayerCount <$> playerCount
+        pc = unPlayerCount <$> getPlayerCount
       in
         successClient show env $ (,,) <$> pc <*> reg <*> pc
   in
@@ -127,7 +127,7 @@ cRegFirstForbidden env =
     execute (RegFirstForbidden rp) =
       let
         reg = failureClient (const "Should return 403") env $ registerFirst rp
-        pc = successClient show env $ getPlayerCount <$> playerCount
+        pc = successClient show env $ unPlayerCount <$> getPlayerCount
       in
         (,,) <$> pc <*> reg <*> pc
   in
@@ -172,7 +172,7 @@ cRegister env token =
   let
     gen _s = Just (Register <$> genRegPlayerRandomAdmin)
     execute (Register rp) =
-      let pc = getPlayerCount <$> playerCount
+      let pc = unPlayerCount <$> getPlayerCount
        in successClient show env $ (,) <$> register token rp <*> pc
   in
     Command gen execute [

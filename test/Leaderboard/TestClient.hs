@@ -12,11 +12,11 @@ import           Leaderboard.API.Player (AuthHeaders, PlayerAPI, playerAPI)
 import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
                                          Token (..))
 
-register      :: SAC.Token -> RegisterPlayer -> ClientM Token
-registerFirst :: RegisterPlayer -> ClientM (AuthHeaders Token)
-authenticate  :: Login -> ClientM (AuthHeaders Token)
-playerCount   :: ClientM PlayerCount
-(register :<|> registerFirst :<|> authenticate :<|> playerCount) =
+register       :: SAC.Token -> RegisterPlayer -> ClientM Token
+registerFirst  :: RegisterPlayer -> ClientM (AuthHeaders Token)
+authenticate   :: Login -> ClientM (AuthHeaders Token)
+getPlayerCount :: ClientM PlayerCount
+(register :<|> registerFirst :<|> authenticate :<|> getPlayerCount) =
   client (playerAPI :: Proxy (PlayerAPI '[JWT]))
 
 toServantToken

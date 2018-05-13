@@ -83,7 +83,7 @@ instance ToJSON PlayerSession
 instance FromJSON PlayerSession
 
 newtype PlayerCount
-  = PlayerCount { getPlayerCount :: Integer }
+  = PlayerCount { unPlayerCount :: Integer }
   deriving (Eq, Generic, Show)
 instance FromJSON PlayerCount where
   parseJSON =
