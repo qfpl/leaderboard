@@ -27,7 +27,7 @@ import qualified Hedgehog.Range          as Range
 import           Test.Tasty              (TestTree, testGroup)
 import           Test.Tasty.Hedgehog     (testProperty)
 
-import           Leaderboard.Schema      (PlayerId (..))
+import           Leaderboard.Schema      (PlayerId (..), Match (..))
 import           Leaderboard.SharedState (LeaderboardState (..), PlayerMap,
                                           genPlayerToken)
 import           Leaderboard.TestClient  (fromLbToken', getPlayerCount,
@@ -60,7 +60,8 @@ genTwoPlayerIds ps =
   then Nothing
   else Just $ do
     -- Beware the Gen.just here. As long as we've checked we have enough players to satisfy generating
-    -- the ids we need, then this should be fine.
+    -- the ids we need, then this should be fine. It's not quite partial, but the generator will fail
+    -- if it retries too many times.
     let genPlayerIdJust = Gen.just . sequenceA . genPlayerId $ ps
     p1Id <- genPlayerIdJust
     p2Id <- Gen.filter (/= p1Id) genPlayerIdJust
@@ -116,8 +117,16 @@ cAddMatch env =
       gMatch <- genMatch ps
       gToken <- genPlayerToken ps
       pure $ AddMatch <$> gMatch <*> gToken
+    exe (AddMatch rm t) =
+      successClient show env $ add (mkMatchClient t) rm
   in
-    undefined
+    Command gen exe [
+      Require $ \(LeaderboardState ps _as _ms) ->
+        -- Need a token, and need a player and their opponent
+        length ps >= 2
+    , Update $ \(LeaderboardState _ps _as ms) (AddMatch (RqMatch{..} _t)) Match{..} ->
+        undefined
+    ]
 
 cListMatches = undefined
 
