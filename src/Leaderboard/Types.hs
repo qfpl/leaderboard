@@ -154,3 +154,13 @@ instance FromJSON RqMatch where
       <*> v .:  "player1Score"
       <*> v .:  "player2Score"
       <*> v .:  "time"
+
+instance ToJSON RqMatch where
+  toJSON RqMatch{..} =
+    object
+    [ "player1" .= _matchPlayer1
+    , "player2" .= _matchPlayer2
+    , "player1Score" .= _matchPlayer1Score
+    , "player2Score" .= _matchPlayer2Score
+    , "time" .= _matchTime
+    ]
