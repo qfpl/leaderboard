@@ -1,4 +1,5 @@
 {-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Leaderboard.MatchTests
@@ -16,9 +17,9 @@ import           Servant.Auth.Client     (Token)
 import           Servant.Client          (ClientEnv, ClientM, ServantError (..),
                                           runClientM)
 
-import           Hedgehog                (Callback (..), Command (Command), Gen,
+import           Hedgehog                (Callback (..), Command (Command), Gen, concrete,
                                           HTraversable (htraverse), MonadGen,
-                                          MonadTest, PropertyT, Var,
+                                          MonadTest, PropertyT, Var (Var),
                                           annotateShow, executeSequential,
                                           failure, forAll, property, (===))
 import qualified Hedgehog.Gen            as Gen
@@ -27,11 +28,11 @@ import qualified Hedgehog.Range          as Range
 import           Test.Tasty              (TestTree, testGroup)
 import           Test.Tasty.Hedgehog     (testProperty)
 
-import           Leaderboard.Schema      (PlayerId (..), Match (..))
+import           Leaderboard.Schema      (MatchT (..), Match (..), PlayerId (..))
 import           Leaderboard.SharedState (LeaderboardState (..), PlayerMap,
-                                          genPlayerToken)
+                                          genPlayerToken, successClient, failureClient)
 import           Leaderboard.TestClient  (fromLbToken', getPlayerCount,
-                                          register, registerFirst)
+                                          register, registerFirst, MatchClient (..), mkMatchClient)
 import           Leaderboard.Types       (RqMatch (RqMatch))
 
 matchTests
@@ -103,6 +104,8 @@ genMatch ps =
 data AddMatch (v :: * -> *) =
   AddMatch RqMatch (Var Token v)
   deriving (Eq, Show)
+instance HTraversable AddMatch where
+  htraverse f (AddMatch rm (Var ht)) = AddMatch rm . Var <$> f ht
 
 cAddMatch
   :: ( MonadGen n
@@ -118,13 +121,12 @@ cAddMatch env =
       gToken <- genPlayerToken ps
       pure $ AddMatch <$> gMatch <*> gToken
     exe (AddMatch rm t) =
-      successClient show env $ add (mkMatchClient t) rm
+      successClient show env $ add (mkMatchClient (concrete t)) rm
   in
     Command gen exe [
-      Require $ \(LeaderboardState ps _as _ms) ->
-        -- Need a token, and need a player and their opponent
-        length ps >= 2
-    , Update $ \(LeaderboardState _ps _as ms) (AddMatch (RqMatch{..} _t)) Match{..} ->
+      -- Need a token, and need a player and their opponent
+      Require $ \(LeaderboardState ps _as _ms) _input -> length ps >= 2
+    , Update $ \(LeaderboardState _ps _as ms) (AddMatch RqMatch{..} _t) _out ->
         undefined
     ]
 

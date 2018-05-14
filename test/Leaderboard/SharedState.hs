@@ -13,7 +13,7 @@ import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
 
-import           Hedgehog               (Eq1, Gen, Show1, Var)
+import           Hedgehog               (Eq1, Show1, Var, MonadGen)
 import qualified Hedgehog.Gen           as Gen
 
 import           Leaderboard.Schema     (Match)
@@ -58,8 +58,9 @@ successClient f ce a = do
   either (fail . f) pure r
 
 genAdminToken
-  :: LeaderboardState v
-  -> Maybe (Gen (Var Token v))
+  :: MonadGen n
+  => LeaderboardState v
+  -> Maybe (n (Var Token v))
 genAdminToken (LeaderboardState ps as _ms) =
   let
     -- Emails in admin _must_ be a subset of those in players. Without a Traversable
@@ -70,7 +71,8 @@ genAdminToken (LeaderboardState ps as _ms) =
     fmap (fmap f) mGEmail
 
 genPlayerToken
-  :: PlayerMap v
-  -> Maybe (Gen (Var Token v))
+  :: MonadGen n
+  => PlayerMap v
+  -> Maybe (n (Var Token v))
 genPlayerToken =
   liftA3 bool (pure . fmap (_pwtToken . snd) . Gen.element . M.toList) (const Nothing) null
