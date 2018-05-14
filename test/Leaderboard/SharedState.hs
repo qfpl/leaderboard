@@ -3,6 +3,7 @@
 
 module Leaderboard.SharedState where
 
+import           Control.Applicative    (liftA3)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Bool              (bool)
 import qualified Data.Map               as M
@@ -67,3 +68,9 @@ genAdminToken (LeaderboardState ps as _ms) =
     mGEmail =  bool (pure . Gen.element . S.toList $ as) Nothing $ S.null as
   in
     fmap (fmap f) mGEmail
+
+genPlayerToken
+  :: PlayerMap v
+  -> Maybe (Gen (Var Token v))
+genPlayerToken =
+  liftA3 bool (pure . fmap (_pwtToken . snd) . Gen.element . M.toList) (const Nothing) null

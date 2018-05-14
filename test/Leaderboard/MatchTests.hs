@@ -9,14 +9,15 @@ import qualified Data.Map                as M
 import qualified Data.Set                as S
 import           Data.Time               (UTCTime)
 import           Database.Beam           (Auto (..))
+import           Servant.Auth.Client     (Token)
 import           Servant.Client          (ClientEnv, ClientM, ServantError (..),
                                           runClientM)
 
 import           Hedgehog                (Callback (..), Command (Command), Gen,
-                                          HTraversable (htraverse), MonadTest,
-                                          PropertyT, annotateShow,
-                                          executeSequential, failure, forAll,
-                                          property, (===))
+                                          HTraversable (htraverse), MonadGen,
+                                          MonadTest, PropertyT, Var,
+                                          annotateShow, executeSequential,
+                                          failure, forAll, property, (===))
 import qualified Hedgehog.Gen            as Gen
 import qualified Hedgehog.Range          as Range
 
@@ -24,7 +25,7 @@ import           Test.Tasty              (TestTree, testGroup)
 import           Test.Tasty.Hedgehog     (testProperty)
 
 import           Leaderboard.Schema      (PlayerId (..))
-import           Leaderboard.SharedState (LeaderboardState (..))
+import           Leaderboard.SharedState (LeaderboardState (..), genPlayerToken)
 import           Leaderboard.TestClient  (fromLbToken', getPlayerCount,
                                           register, registerFirst)
 import           Leaderboard.Types       (RqMatch)
@@ -59,7 +60,24 @@ genMatch =
   -- <*> Gen.int (Range.linear 1 100)
   -- <*> undefined
 
-cAddMatch = undefined
+data AddMatch (v :: * -> *) =
+  AddMatch RqMatch (Var Token v)
+  deriving (Eq, Show)
+
+cAddMatch
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
+  => ClientEnv
+  -> Command n m LeaderboardState
+cAddMatch env =
+  let
+    gen (LeaderboardState ps as _ms) =
+      (AddMatch <$> genMatch <*>) <$> genPlayerToken ps
+  in
+    undefined
+
 cListMatches = undefined
 
 initialState
