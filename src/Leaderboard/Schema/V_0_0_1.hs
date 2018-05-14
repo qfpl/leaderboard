@@ -31,7 +31,8 @@ import           Database.Beam.Migrate          (CheckedDatabaseSettings,
 
 import           Database.Beam.Postgres         (PgCommandSyntax, Postgres)
 import           Database.Beam.Postgres.Migrate (boolean, bytea, serial)
-import           Servant                        (FromHttpApiData (parseUrlPiece))
+import           Servant                        (FromHttpApiData (parseUrlPiece),
+                                                 ToHttpApiData (toUrlPiece))
 import           Servant.Auth.Server            (FromJWT, ToJWT)
 
 data RatingT f
@@ -152,6 +153,9 @@ deriving instance Ord MatchId
 instance FromHttpApiData MatchId where
   parseUrlPiece = fmap (MatchId . Auto . pure) . parseUrlPiece
 
+instance ToHttpApiData MatchId where
+  toUrlPiece (MatchId (Auto mId)) = maybe "" toUrlPiece mId
+
 instance ToJSON Match where
   toJSON Match{..} =
     object
@@ -162,6 +166,17 @@ instance ToJSON Match where
     , "player2Score" .= _matchPlayer2Score
     , "timestamp" .= _matchTime
     ]
+
+instance FromJSON Match where
+  parseJSON =
+    withObject "Match" $ \v ->
+    Match
+      <$> v .: "id"
+      <*> v .: "player1"
+      <*> v .: "player2"
+      <*> v .: "player1Score"
+      <*> v .: "player2Score"
+      <*> v .: "timestamp"
 
 
 data LadderT f
