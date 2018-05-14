@@ -15,6 +15,7 @@ module Leaderboard.Queries
   , insertPlayer
   -- * Matche
   , insertMatch
+  , selectMatch
   , selectMatches
   ) where
 
@@ -40,8 +41,9 @@ import           Database.PostgreSQL.Simple.Transaction   (withTransactionSerial
 import           Leaderboard.Lens                         (_Auto)
 import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
-                                                           Match, MatchT (..),
-                                                           Player, PlayerT (..),
+                                                           Match,
+                                                           MatchT (..), Player,
+                                                           PlayerT (..),
                                                            leaderboardDb,
                                                            matchId)
 import           Leaderboard.Types                        (LeaderboardError (..),
@@ -141,9 +143,18 @@ insertMatch conn RqMatch{..} = do
 
 selectMatches
   :: Connection
-  -> IO [Match]
+  -> IO (Either LeaderboardError [Match])
 selectMatches conn =
-  selectList conn $ B.all_ (_leaderboardMatches leaderboardDb)
+  tryJustPgError . selectList conn $ B.all_ (_leaderboardMatches leaderboardDb)
+
+selectMatch
+  :: Connection
+  -> Int
+  -> IO (Either LeaderboardError Match)
+selectMatch conn mId =
+  selectOne conn $
+    B.filter_ (\m -> _matchId m B.==. (B.val_ . B.Auto . Just $ mId)) .
+    B.all_ $ _leaderboardMatches leaderboardDb
 
 -- Unsure of the types for the following, and the inferred types cause compiler errors
 insertValues conn table vals =

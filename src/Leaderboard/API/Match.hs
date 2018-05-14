@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE TypeOperators         #-}
 
 module Leaderboard.API.Match where
@@ -14,8 +13,10 @@ import qualified Control.Monad.Log           as Log
 import           Control.Monad.Log.Label     (Label (Label), withLabel)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Data.Proxy                  (Proxy (Proxy))
 import           Data.Semigroup              ((<>))
 import           Data.Text                   (Text, pack)
+import           Database.Beam               (Auto (Auto))
 import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
                                               DeleteNoContent, Get, JSON,
@@ -25,18 +26,24 @@ import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
 import           Servant.Auth.Server         (Auth, AuthResult)
 
 import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
-import           Leaderboard.Queries         (insertMatch, selectMatches)
+import           Leaderboard.Queries         (insertMatch, selectMatch,
+                                              selectMatches)
 import           Leaderboard.Schema          (Match, MatchId)
-import           Leaderboard.Types           (PlayerSession (..), RqMatch (..),
-                                              tryJustPgError)
+import qualified Leaderboard.Schema          as LS
+import           Leaderboard.Types           (LeaderboardError,
+                                              PlayerSession (..), RqMatch (..))
 
 type MatchAPI auths =
   Auth auths PlayerSession :> "matches" :>
   (      "add" :> ReqBody '[JSON] RqMatch :> PostNoContent '[JSON] Int
     :<|> "list" :> Get '[JSON] [Match]
+    :<|> "get" :> Capture "id" MatchId :> Get '[JSON] Match
     :<|> Capture "id" MatchId :> DeleteNoContent '[JSON] NoContent
     :<|> Capture "id" MatchId :> ReqBody '[JSON] RqMatch :> PutNoContent '[JSON] NoContent
   )
+
+matchAPI :: Proxy (MatchAPI auths)
+matchAPI = Proxy
 
 matchServer
   :: ( HasDbConnPool r
@@ -49,6 +56,7 @@ matchServer
 matchServer arp =
         addMatch arp
   :<|> listMatches arp
+  :<|> getMatch arp
   :<|> deleteMatch arp
   :<|> editMatch arp
 
@@ -81,13 +89,41 @@ listMatches
   => AuthResult PlayerSession
   -> m [Match]
 listMatches arp =
+  getMatch'es arp selectMatches
+
+getMatch
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     , MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => AuthResult PlayerSession
+  -> MatchId
+  -> m Match
+getMatch arp mId = do
+  mIdOrBust <- matchId mId
+  let f conn = selectMatch conn mIdOrBust
+  getMatch'es arp f
+
+getMatch'es
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     , MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => AuthResult PlayerSession
+  -> (Connection -> IO (Either LeaderboardError a))
+  -> m a
+getMatch'es arp f =
   withAuthConnAndLog arp "/matches/list" $ \conn -> do
   let
     bad e = do
-      Log.error $ "Error retrieving matches: " <> (pack . show $ e)
-      throwError $ err500 { errBody = "Error retrieving matches" }
-  el <- liftIO . tryJustPgError $ selectMatches conn
-  either bad pure el
+      Log.error $ "Error retrieving match(es): " <> (pack . show $ e)
+      throwError $ err500 { errBody = "Error retrieving match(es)" }
+  er <- liftIO $ f conn
+  either bad pure er
 
 deleteMatch
   :: ( HasDbConnPool r
@@ -131,3 +167,10 @@ withAuthConnAndLog arp label f =
   asPlayer arp $ \_pId ->
   withLabel (Label label) $
   withConn $ \conn -> f conn
+
+matchId
+  :: MonadError ServantErr m
+  => MatchId
+  -> m Int
+matchId (LS.MatchId (Auto mId)) =
+  maybe (throwError err500) pure mId
