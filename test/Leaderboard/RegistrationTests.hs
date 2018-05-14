@@ -90,7 +90,7 @@ cGetPlayerCount env =
     exe _i = successClient show env $ unPlayerCount <$> getPlayerCount
   in
     Command gen exe [
-      Ensure $ \(LeaderboardState ps as) _sNew _i c -> do
+      Ensure $ \(LeaderboardState ps as _ms) _sNew _i c -> do
         annotateShow ps
         annotateShow as
         length ps === fromIntegral c
@@ -118,17 +118,17 @@ cRegFirst
   -> Command Gen (PropertyT IO) LeaderboardState
 cRegFirst env =
   let
-    gen (LeaderboardState ps _as) =
+    gen (LeaderboardState ps _as _ms) =
       bool Nothing (Just $ RegFirst <$> genRegPlayerRandomAdmin ps) $ null ps
     execute (RegFirst rp) =
       let mkError = (("Should succeed with token, but got: " <>) . show)
        in successClient mkError env . fmap fromLbToken' $ registerFirst rp
   in
     Command gen execute [
-      Require $ \(LeaderboardState ps _) _input -> null ps
-    , Update $ \_s (RegFirst lbr@LeaderboardRegistration{..}) t ->
-        LeaderboardState (M.singleton _lbrEmail (mkPlayerWithToken lbr t)) (S.singleton _lbrEmail)
-    , Ensure $ \_sOld (LeaderboardState psNew _) (RegFirst _rp) _t -> length psNew === 1
+      Require $ \(LeaderboardState ps _as _ms) _input -> null ps
+    , Update $ \(LeaderboardState _ps _as ms) (RegFirst lbr@LeaderboardRegistration{..}) t ->
+        LeaderboardState (M.singleton _lbrEmail (mkPlayerWithToken lbr t)) (S.singleton _lbrEmail) ms
+    , Ensure $ \_sOld (LeaderboardState psNew _as _ms) (RegFirst _rp) _t -> length psNew === 1
     ]
 
 cRegFirstForbidden
@@ -136,13 +136,13 @@ cRegFirstForbidden
   -> Command Gen (PropertyT IO) LeaderboardState
 cRegFirstForbidden env =
   let
-    gen (LeaderboardState ps _as) =
+    gen (LeaderboardState ps _as _ms) =
       bool (Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin ps) Nothing $ null ps
     execute (RegFirstForbidden rp) =
       failureClient (const "Should return 403") env $ registerFirst rp
   in
     Command gen execute [
-      Require $ \(LeaderboardState ps _as) _input -> not (null ps)
+      Require $ \(LeaderboardState ps _as _ms) _input -> not (null ps)
     , Ensure $ \sOld sNew _input se -> do
         sOld === sNew
         case se of
@@ -165,14 +165,14 @@ cRegister
   -> Command Gen (PropertyT IO) LeaderboardState
 cRegister env =
   let
-    gen rs@(LeaderboardState ps _as) =
+    gen rs@(LeaderboardState ps _as _ms) =
       (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminToken rs
     execute (Register rp token) =
       successClient show env . fmap fromLbToken $ register (concrete token) rp
   in
     Command gen execute [
-      Require $ \(LeaderboardState _ps as) _input -> not (null as)
-    , Update $ \(LeaderboardState ps as) (Register rp@LeaderboardRegistration{..} _rqToken) t ->
+      Require $ \(LeaderboardState _ps as _ms) _input -> not (null as)
+    , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) t ->
         let
           newPlayers = M.insert _lbrEmail (mkPlayerWithToken rp t) ps
           newAdmins =
@@ -180,15 +180,15 @@ cRegister env =
               Just True -> S.insert _lbrEmail as
               _         -> as
         in
-          LeaderboardState newPlayers newAdmins
-    , Ensure $ \(LeaderboardState psOld _asOld) (LeaderboardState psNew _asNew) _input _output ->
+          LeaderboardState newPlayers newAdmins ms
+    , Ensure $ \(LeaderboardState psOld _asOld _msOld) (LeaderboardState psNew _asNew _msNew) _input _output ->
         length psNew === length psOld + 1
     ]
 
 initialState
   :: LeaderboardState (v :: * -> *)
 initialState =
-  LeaderboardState M.empty S.empty
+  LeaderboardState M.empty S.empty M.empty
 
 propRegFirst
   :: ClientEnv

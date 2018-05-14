@@ -31,7 +31,7 @@ import           Servant                                ((:<|>) ((:<|>)), (:>),
                                                          ServantErr, ServerT,
                                                          err401, err403, err500,
                                                          errBody)
-import           Servant.Auth.Server                    (Auth, AuthResult (Authenticated),
+import           Servant.Auth.Server                    (Auth, AuthResult,
                                                          CookieSettings,
                                                          JWTSettings, SetCookie,
                                                          acceptLogin, makeJWT)
