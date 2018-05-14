@@ -26,15 +26,13 @@ import           Data.Text.Encoding                     (encodeUtf8)
 import           Database.Beam                          (unAuto)
 import           Database.PostgreSQL.Simple.Transaction (withTransactionSerializable)
 import           Servant                                ((:<|>) ((:<|>)), (:>),
-                                                         Get, Header, Headers,
-                                                         JSON, Post, ReqBody,
-                                                         ServantErr, ServerT,
-                                                         err401, err403, err500,
+                                                         Get, JSON, Post,
+                                                         ReqBody, ServantErr,
+                                                         ServerT, err401,
+                                                         err403, err500,
                                                          errBody)
 import           Servant.Auth.Server                    (Auth, AuthResult,
-                                                         CookieSettings,
-                                                         JWTSettings, SetCookie,
-                                                         acceptLogin, makeJWT)
+                                                         JWTSettings, makeJWT)
 
 import           Leaderboard.Env                        (HasDbConnPool,
                                                          asPlayer, withConn)
@@ -43,23 +41,23 @@ import           Leaderboard.Queries                    (insertPlayer,
                                                          selectPlayerById,
                                                          selectPlayerCount)
 import           Leaderboard.Schema                     (Player, PlayerT (..))
+import qualified Leaderboard.Schema                     as LS
 import           Leaderboard.Types                      (LeaderboardError (PlayerExists),
                                                          Login (..),
                                                          PlayerCount (PlayerCount),
                                                          PlayerSession (..),
                                                          RegisterPlayer (..),
+                                                         RspPlayer (..),
                                                          Token (..))
 
 type PlayerAPI auths =
-       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] Token
-  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] (AuthHeaders Token)
-  :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] (AuthHeaders Token)
+       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
+  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
+  :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] Token
   :<|> "player-count" :> Get '[JSON] PlayerCount
 
 playerAPI :: Proxy (PlayerAPI auths)
 playerAPI = Proxy
-
-type AuthHeaders = Headers '[Header "Set-Cookie" SetCookie , Header "Set-Cookie" SetCookie]
 
 playerServer
   :: ( HasDbConnPool r
@@ -68,13 +66,12 @@ playerServer
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => CookieSettings
-  -> JWTSettings
+  => JWTSettings
   -> ServerT (PlayerAPI auths) m
-playerServer cs jwts =
+playerServer jwts =
        register jwts
-  :<|> registerFirst cs jwts
-  :<|> authenticate cs jwts
+  :<|> registerFirst jwts
+  :<|> authenticate jwts
   :<|> playerCount
 
 register
@@ -87,7 +84,7 @@ register
   => JWTSettings
   -> AuthResult PlayerSession
   -> RegisterPlayer
-  -> m Token
+  -> m RspPlayer
 register jwts arp rp =
   withLabel (Label "/register") $
   asPlayer arp $ \psId -> do
@@ -98,7 +95,7 @@ register jwts arp rp =
         throwError $ err401 { errBody = "Please try reauthenticating" }
       Right Player{..} ->
         if _playerIsAdmin
-          then (makeToken jwts <=< playerId <=< insertPlayer') rp
+          then (pure . RspPlayer (LS.PlayerId _playerId) <=< makeToken jwts <=< playerId <=< insertPlayer') rp
           else throwError $ err401 {errBody = "Must be an admin to register a new player"}
 
 registerFirst
@@ -108,11 +105,10 @@ registerFirst
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => CookieSettings
-  -> JWTSettings
+  => JWTSettings
   -> RegisterPlayer
-  -> m (AuthHeaders Token)
-registerFirst cs jwts rp =
+  -> m RspPlayer
+registerFirst jwts rp =
   withLabel (Label "/register-first") $ do
   -- Possible race condition between checking count and inserting -- transaction it
   ep <- withConn $ \conn -> liftIO . withTransactionSerializable conn $ do
@@ -128,8 +124,10 @@ registerFirst cs jwts rp =
     Left e -> do
       Log.error . T.pack . show $ e
       throwError err500
-    Right p ->
-      playerId p >>= authenticatePlayerId cs jwts
+    Right p@Player{..} -> do
+      pId <- playerId p
+      token <- makeToken jwts pId
+      pure $ RspPlayer (LS.PlayerId _playerId) token
 
 authenticate
   :: ( HasDbConnPool r
@@ -138,11 +136,10 @@ authenticate
      , MonadError ServantErr m
      , MonadLog Label m
      )
-  => CookieSettings
-  -> JWTSettings
+  => JWTSettings
   -> Login
-  -> m (AuthHeaders Token)
-authenticate cs jwts Login{..} =
+  -> m Token
+authenticate jwts Login{..} =
   withLabel (Label "/login") $ do
   let
     loginPass = Pass . encodeUtf8 $ _loginPassword
@@ -154,7 +151,7 @@ authenticate cs jwts Login{..} =
     Left e           -> throwLoginFail e
     Right p@Player{..} ->
       if verifyPass' loginPass (EncryptedPass _playerPassword)
-        then playerId p >>= authenticatePlayerId cs jwts
+        then playerId p >>= makeToken jwts
         else throwLoginFail ("Bad password" :: T.Text)
 
 playerCount
@@ -167,33 +164,6 @@ playerCount
   => m PlayerCount
 playerCount =
   withLabel (Label "/player-count") $ PlayerCount <$> getPlayerCount
-
-authenticatePlayerId
-  :: ( MonadError ServantErr m
-     , MonadLog Label m
-     )
-  => CookieSettings
-  -> JWTSettings
-  -> Int
-  -> m (AuthHeaders Token)
-authenticatePlayerId cs jwts pId = do
-  token <- makeToken jwts pId
-  addAuthHeaders cs jwts pId token
-
-addAuthHeaders
-  :: ( MonadError ServantErr m
-     , MonadLog Label m
-     )
-  => CookieSettings
-  -> JWTSettings
-  -> Int
-  -> response
-  -> m (AuthHeaders response)
-addAuthHeaders cs jwts pId r = do
-  mApplyCookies <- liftIO . acceptLogin cs jwts . PlayerSession $ pId
-  case mApplyCookies of
-    Nothing           -> throwError err401
-    Just applyCookies -> pure $ applyCookies r
 
 insertPlayer'
   :: ( HasDbConnPool r

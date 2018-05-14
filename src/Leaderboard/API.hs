@@ -12,8 +12,8 @@ import           Control.Monad.Reader        (MonadReader)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.Proxy                  (Proxy (Proxy))
 import           Servant                     (ServantErr, ServerT, (:<|>)((:<|>)))
-import           Servant.Auth                (Cookie, JWT)
-import           Servant.Auth.Server         (CookieSettings, JWTSettings)
+import           Servant.Auth                (JWT)
+import           Servant.Auth.Server         (JWTSettings)
 
 import           Leaderboard.API.Player      (PlayerAPI, playerServer)
 import           Leaderboard.API.Match      (MatchAPI, matchServer)
@@ -24,7 +24,7 @@ type LeaderboardAPI auths =
   :<|> MatchAPI auths
 
 leaderboardAPI
-  :: Proxy (LeaderboardAPI '[JWT, Cookie])
+  :: Proxy (LeaderboardAPI '[JWT])
 leaderboardAPI = Proxy
 
 leaderboardServer
@@ -34,9 +34,8 @@ leaderboardServer
      , MonadError ServantErr  m
      , MonadLog Label m
      )
-  => CookieSettings
-  -> JWTSettings
+  => JWTSettings
   -> ServerT (LeaderboardAPI auths) m
-leaderboardServer cs jwts =
-       playerServer cs jwts
+leaderboardServer jwts =
+       playerServer jwts
   :<|> matchServer

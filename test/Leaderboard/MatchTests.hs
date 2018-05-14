@@ -36,13 +36,15 @@ import           Test.Tasty.Hedgehog           (testProperty)
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.Schema            (Match (..), MatchT (..),
                                                 PlayerId (..), PlayerT (..))
+import qualified Leaderboard.Schema            as LS
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, failureClient,
-                                                genPlayerToken, successClient)
-import           Leaderboard.TestClient        (MatchClient (..), fromLbToken',
+                                                genPlayerRsp, successClient)
+import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
                                                 register, registerFirst)
-import           Leaderboard.Types             (RqMatch (RqMatch))
+import           Leaderboard.Types             (RqMatch (RqMatch),
+                                                RspPlayer (..))
 
 matchTests
   :: IO ()
@@ -52,15 +54,6 @@ matchTests resetDb env =
   testGroup "match" [
     propMatchTests env resetDb
   ]
-
-genPlayerId
-  :: MonadGen n
-  => PlayerMap v
-  -> Maybe (n PlayerId)
-genPlayerId ps =
-  if null ps
-  then Nothing
-  else pure . fmap (_playerId . snd) . Gen.element . M.toList $ ps
 
 genTwoPlayerIds
   :: MonadGen n
@@ -73,7 +66,7 @@ genTwoPlayerIds ps =
     -- Beware the Gen.just here. As long as we've checked we have enough players to satisfy generating
     -- the ids we need, then this should be fine. It's not quite partial, but the generator will fail
     -- if it retries too many times.
-    let genPlayerIdJust = Gen.just . sequenceA . genPlayerId $ ps
+    let genPlayerIdJust = Gen.just . sequenceA . fmap (LS.PlayerId . _rspId) . genPlayerRsp $ ps
     p1Id <- genPlayerIdJust
     p2Id <- Gen.filter (/= p1Id) genPlayerIdJust
     pure (p1Id, p2Id)

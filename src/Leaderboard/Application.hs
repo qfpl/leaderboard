@@ -22,6 +22,6 @@ leaderboard env logger =
     cfg = defaultCookieSettings :. jwtCfg :. EmptyContext
     toHandler' :: LHandlerT Env Handler :~> Handler
     toHandler' = toHandler env logger
-    server = leaderboardServer defaultCookieSettings jwtCfg
+    server = leaderboardServer jwtCfg
   in
     serveWithContext leaderboardAPI cfg $ enter toHandler' server

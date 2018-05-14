@@ -135,26 +135,25 @@ instance ToJSON RegisterPlayer where
     ]
 
 
-instance FromJSON PlayerWithToken where
+data RspPlayer =
+  RspPlayer
+  { _rspId :: PlayerId
+  , _rspToken :: Token
+  }
+  deriving (Eq, Show)
+
+instance FromJSON RspPlayer where
   parseJSON =
-    withObject "PlayerWithToken" $ \v ->
-      PlayerWithToken <$>
+    withObject "RspPlayer" $ \v ->
+      RspPlayer <$>
       v .: "id" <*>
-      v .: "email" <*>
-      v .: "name" <*>
-      v .: "password" <*>
-      v .: "isAdmin" <*>
       v .: "token"
 
-instance ToJSON PlayerWithToken where
-  toJSON PlayerWithToken{..} =
+instance ToJSON RspPlayer where
+  toJSON RspPlayer{..} =
     object
-    [ "id" .= _pwtId
-    , "email" .= _pwtEmail
-    , "name" .= _pwtUsername
-    , "password" .= _pwtPassword
-    , "isAdmin" .= _pwtIsAdmin
-    , "token" .= _pwtToken
+    [ "id" .= _rspId
+    , "token" .= _rspToken
     ]
 
 

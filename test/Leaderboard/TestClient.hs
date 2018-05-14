@@ -4,22 +4,21 @@
 module Leaderboard.TestClient where
 
 import           Data.Proxy             (Proxy)
-import           Servant.API            ((:<|>) ((:<|>)), NoContent,
-                                         getResponse)
+import           Servant.API            ((:<|>) ((:<|>)), NoContent)
 import           Servant.Auth           (JWT)
 import qualified Servant.Auth.Client    as SAC (Token (Token))
 import           Servant.Client         (ClientM, client)
 
 import           Leaderboard.API.Match  (MatchAPI, matchAPI)
-import           Leaderboard.API.Player (AuthHeaders, PlayerAPI, playerAPI)
+import           Leaderboard.API.Player (PlayerAPI, playerAPI)
 import           Leaderboard.Schema     (Match, MatchId)
 import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
-                                         RqMatch, Token (..))
+                                         RqMatch, RspPlayer, Token (..))
 
 -- TODO ajmccluskey: probs nice to have this in the main lib rather than test code.
-register       :: SAC.Token -> RegisterPlayer -> ClientM Token
-registerFirst  :: RegisterPlayer -> ClientM (AuthHeaders Token)
-authenticate   :: Login -> ClientM (AuthHeaders Token)
+register       :: SAC.Token -> RegisterPlayer -> ClientM RspPlayer
+registerFirst  :: RegisterPlayer -> ClientM RspPlayer
+authenticate   :: Login -> ClientM Token
 getPlayerCount :: ClientM PlayerCount
 (register :<|> registerFirst :<|> authenticate :<|> getPlayerCount) =
   -- Servant.Client version doesn't do cookie jar for us, so just stick to JWT
@@ -50,9 +49,3 @@ fromLbToken
   -> SAC.Token
 fromLbToken =
   SAC.Token . getToken
-
-fromLbToken'
-  :: AuthHeaders Token
-  -> SAC.Token
-fromLbToken' =
-  fromLbToken . getResponse

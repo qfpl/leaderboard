@@ -31,13 +31,12 @@ import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
 import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
-                                            PlayerWithToken (..), failureClient,
-                                            genAdminToken, successClient)
-import           Leaderboard.TestClient    (fromLbToken, fromLbToken',
-                                            getPlayerCount, register,
-                                            registerFirst)
+                                            PlayerWithRsp (..), failureClient,
+                                            genAdminRsp, successClient)
+import           Leaderboard.TestClient    (fromLbToken, getPlayerCount,
+                                            register, registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
-                                            RegisterPlayer (..))
+                                            RegisterPlayer (..), RspPlayer (..))
 
 registrationTests
   :: IO ()
@@ -62,18 +61,25 @@ genRegPlayerRandomAdmin ps =
       <*> genNonEmptyUnicode
       <*> Gen.maybe Gen.bool
 
-mkPlayerWithToken
+mkPlayerWithRsp
   :: RegisterPlayer
-  -> Var Token v
-  -> PlayerWithToken v
-mkPlayerWithToken LeaderboardRegistration{..} _pwtToken =
+  -> Var RspPlayer v
+  -> PlayerWithRsp v
+mkPlayerWithRsp LeaderboardRegistration{..} rsp =
   let
+    _pwtRsp = rsp
     _pwtEmail = _lbrEmail
     _pwtUsername = _lbrUsername
     _pwtPassword = _lbrPassword
     _pwtIsAdmin = _lbrIsAdmin
   in
-    PlayerWithToken{..}
+    PlayerWithRsp{..}
+
+clientToken
+  :: RspPlayer
+  -> Token
+clientToken RspPlayer{..} =
+  fromLbToken _rspToken
 
 --------------------------------------------------------------------------------
 -- PLAYER COUNT
@@ -126,12 +132,12 @@ cRegisterFirst env =
       bool Nothing (Just $ RegFirst <$> genRegPlayerRandomAdmin ps) $ null ps
     execute (RegFirst rp) =
       let mkError = (("Should succeed with token, but got: " <>) . show)
-       in successClient mkError env . fmap fromLbToken' $ registerFirst rp
+       in successClient mkError env  $ registerFirst rp
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) _input -> null ps
-    , Update $ \(LeaderboardState _ps _as ms) (RegFirst lbr@LeaderboardRegistration{..}) t ->
-        LeaderboardState (M.singleton _lbrEmail (mkPlayerWithToken lbr t)) (S.singleton _lbrEmail) ms
+    , Update $ \(LeaderboardState _ps _as ms) (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
+        LeaderboardState (M.singleton _lbrEmail (mkPlayerWithRsp lbr rsp)) (S.singleton _lbrEmail) ms
     , Ensure $ \_sOld (LeaderboardState psNew _as _ms) (RegFirst _rp) _t -> length psNew === 1
     ]
 
@@ -159,7 +165,7 @@ cRegisterFirstForbidden env =
 --------------------------------------------------------------------------------
 
 data Register (v :: * -> *) =
-  Register RegisterPlayer (Var Token v)
+  Register RegisterPlayer (Var RspPlayer v)
   deriving (Eq, Show)
 instance HTraversable Register where
   htraverse f (Register rp (Var gt)) = Register rp . Var <$> f gt
@@ -172,15 +178,15 @@ cRegister env =
     gen rs@(LeaderboardState ps as _ms) =
       if null as
       then Nothing
-      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminToken rs
-    execute (Register rp token) =
-      successClient show env . fmap fromLbToken $ register (concrete token) rp
+      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminRsp rs
+    execute (Register rp rsp) =
+      successClient show env $ register (clientToken . concrete $ rsp) rp
   in
     Command gen execute [
       Require $ \(LeaderboardState _ps as _ms) _input -> not (null as)
-    , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) t ->
+    , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) rsp ->
         let
-          newPlayers = M.insert _lbrEmail (mkPlayerWithToken rp t) ps
+          newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
           newAdmins =
             case _lbrIsAdmin of
               Just True -> S.insert _lbrEmail as
