@@ -117,7 +117,7 @@ insertPlayer conn rp@LeaderboardRegistration{..} = do
   (EncryptedPass ePass) <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
   let
     isAdmin = fromMaybe False _lbrIsAdmin
-    newPlayer = Player (B.Auto Nothing) _lbrName _lbrEmail ePass isAdmin
+    newPlayer = Player (B.Auto Nothing) _lbrUsername _lbrEmail ePass isAdmin
     noPlayerError = Left . DbError $ "Error inserting player: " <> pack (show rp)
   ep <- withTransactionSerializable conn $ do
     ep <- selectPlayerByEmail conn _lbrEmail

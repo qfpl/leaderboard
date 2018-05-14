@@ -30,6 +30,17 @@ deriving instance Eq1 v => Eq (LeaderboardState v)
 type PlayerMap v = M.Map Text (PlayerWithToken v)
 type MatchMap v = M.Map (Var Int v) RqMatch
 
+data PlayerWithToken =
+  PlayerWithToken
+  { _pwtId       :: PlayerId
+  , _pwtEmail    :: Text
+  , _pwtUsername :: Text
+  , _pwtPassword :: Text
+  , _pwtIsAdmin  :: Maybe Bool
+  , _pwtToken    :: Token
+  }
+  deriving (Eq, Show)
+
 failureClient
   :: MonadIO m
   => (a -> String)

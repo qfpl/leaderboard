@@ -69,7 +69,7 @@ mkPlayerWithToken
 mkPlayerWithToken LeaderboardRegistration{..} _pwtToken =
   let
     _pwtEmail = _lbrEmail
-    _pwtName = _pwtPassword
+    _pwtUsername = _lbrUsername
     _pwtPassword = _lbrPassword
     _pwtIsAdmin = _lbrIsAdmin
   in

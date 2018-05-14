@@ -110,7 +110,7 @@ instance ToJSON Token where
 data RegisterPlayer
   = LeaderboardRegistration
     { _lbrEmail    :: Text
-    , _lbrName     :: Text
+    , _lbrUsername     :: Text
     , _lbrPassword :: Text
     , _lbrIsAdmin  :: Maybe Bool
     }
@@ -129,22 +129,11 @@ instance ToJSON RegisterPlayer where
   toJSON LeaderboardRegistration{..} =
     object
     [ "email" .= _lbrEmail
-    , "name" .= _lbrName
+    , "name" .= _lbrUsername
     , "password" .= _lbrPassword
     , "isAdmin" .= _lbrIsAdmin
     ]
 
-
-data PlayerWithToken =
-  PlayerWithToken
-  { _pwtId       :: PlayerId
-  , _pwtEmail    :: Text
-  , _pwtName     :: Text
-  , _pwtPassword :: Text
-  , _pwtIsAdmin  :: Maybe Bool
-  , _pwtToken    :: Token
-  }
-  deriving (Eq, Show)
 
 instance FromJSON PlayerWithToken where
   parseJSON =
@@ -162,7 +151,7 @@ instance ToJSON PlayerWithToken where
     object
     [ "id" .= _pwtId
     , "email" .= _pwtEmail
-    , "name" .= _pwtName
+    , "name" .= _pwtUsername
     , "password" .= _pwtPassword
     , "isAdmin" .= _pwtIsAdmin
     , "token" .= _pwtToken
