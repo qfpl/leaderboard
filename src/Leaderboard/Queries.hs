@@ -41,9 +41,8 @@ import           Database.PostgreSQL.Simple.Transaction   (withTransactionSerial
 import           Leaderboard.Lens                         (_Auto)
 import           Leaderboard.Schema                       (JwkT (..),
                                                            LeaderboardDb (..),
-                                                           Match,
-                                                           MatchT (..), Player,
-                                                           PlayerT (..),
+                                                           Match, MatchT (..),
+                                                           Player, PlayerT (..),
                                                            leaderboardDb,
                                                            matchId)
 import           Leaderboard.Types                        (LeaderboardError (..),

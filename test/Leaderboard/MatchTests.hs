@@ -6,34 +6,43 @@ module Leaderboard.MatchTests
   ( matchTests
   ) where
 
-import           Control.Monad.IO.Class  (MonadIO, liftIO)
-import qualified Data.Map                as M
-import qualified Data.Set                as S
-import           Data.Time               (UTCTime (UTCTime), fromGregorian,
-                                          secondsToDiffTime)
-import           Data.Traversable        (sequenceA)
-import           Database.Beam           (Auto (..))
-import           Servant.Auth.Client     (Token)
-import           Servant.Client          (ClientEnv, ClientM, ServantError (..),
-                                          runClientM)
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import qualified Data.Map                      as M
+import qualified Data.Set                      as S
+import           Data.Time                     (UTCTime (UTCTime),
+                                                fromGregorian,
+                                                secondsToDiffTime)
+import           Data.Traversable              (sequenceA)
+import           Database.Beam                 (Auto (..))
+import           Servant.Auth.Client           (Token)
+import           Servant.Client                (ClientEnv, ClientM,
+                                                ServantError (..), runClientM)
 
-import           Hedgehog                (Callback (..), Command (Command), Gen, concrete,
-                                          HTraversable (htraverse), MonadGen,
-                                          MonadTest, PropertyT, Var (Var),
-                                          annotateShow, executeSequential,
-                                          failure, forAll, property, (===))
-import qualified Hedgehog.Gen            as Gen
-import qualified Hedgehog.Range          as Range
+import           Hedgehog                      (Callback (..),
+                                                Command (Command),
+                                                Concrete (Concrete), Gen,
+                                                HTraversable (htraverse),
+                                                MonadGen, MonadTest, PropertyT,
+                                                Var (Var), annotateShow, assert,
+                                                concrete, executeSequential,
+                                                failure, forAll, property,
+                                                (===))
+import qualified Hedgehog.Gen                  as Gen
+import qualified Hedgehog.Range                as Range
 
-import           Test.Tasty              (TestTree, testGroup)
-import           Test.Tasty.Hedgehog     (testProperty)
+import           Test.Tasty                    (TestTree, testGroup)
+import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Leaderboard.Schema      (MatchT (..), Match (..), PlayerId (..))
-import           Leaderboard.SharedState (LeaderboardState (..), PlayerMap,
-                                          genPlayerToken, successClient, failureClient)
-import           Leaderboard.TestClient  (fromLbToken', getPlayerCount,
-                                          register, registerFirst, MatchClient (..), mkMatchClient)
-import           Leaderboard.Types       (RqMatch (RqMatch))
+import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
+import           Leaderboard.Schema            (Match (..), MatchT (..),
+                                                PlayerId (..), PlayerT (..))
+import           Leaderboard.SharedState       (LeaderboardState (..),
+                                                PlayerMap, failureClient,
+                                                genPlayerToken, successClient)
+import           Leaderboard.TestClient        (MatchClient (..), fromLbToken',
+                                                getPlayerCount, mkMatchClient,
+                                                register, registerFirst)
+import           Leaderboard.Types             (RqMatch (RqMatch))
 
 matchTests
   :: IO ()
@@ -48,9 +57,10 @@ genPlayerId
   :: MonadGen n
   => PlayerMap v
   -> Maybe (n PlayerId)
-genPlayerId =
-  undefined
-  -- PlayerId . Auto . Just <$> Gen.int (Range.linear 1 100)
+genPlayerId ps =
+  if null ps
+  then Nothing
+  else pure . fmap (_playerId . snd) . Gen.element . M.toList $ ps
 
 genTwoPlayerIds
   :: MonadGen n
@@ -83,7 +93,6 @@ genTimeStamp =
     gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
   in
     UTCTime <$> gUTCTimeDay <*> gDiffTime
-
 
 genMatch
   :: MonadGen n
@@ -126,8 +135,13 @@ cAddMatch env =
     Command gen exe [
       -- Need a token, and need a player and their opponent
       Require $ \(LeaderboardState ps _as _ms) _input -> length ps >= 2
-    , Update $ \(LeaderboardState _ps _as ms) (AddMatch RqMatch{..} _t) _out ->
-        undefined
+    , Update $ \(LeaderboardState ps as ms) (AddMatch rm _t) vId ->
+        LeaderboardState ps as $ M.insert vId rm ms
+    , Ensure $ \(LeaderboardState _ps _as msOld) (LeaderboardState _ps' _as' msNew) _in mId -> do
+        let vmId = Var (Concrete mId)
+        assert $ M.member vmId msNew
+        assert $ M.notMember vmId msOld
+        length msNew === length msOld + 1
     ]
 
 cListMatches = undefined
@@ -144,7 +158,7 @@ propMatchTests
 propMatchTests env resetDb =
   testProperty "matches" . property $ do
   liftIO resetDb
-  let cs = ($ env) <$> [cAddMatch, cListMatches]
+  let cs = ($ env) <$> [cRegisterFirst, cRegister, cAddMatch] --, cListMatches]
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState cs
   executeSequential initialState commands

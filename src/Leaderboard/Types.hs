@@ -134,6 +134,41 @@ instance ToJSON RegisterPlayer where
     , "isAdmin" .= _lbrIsAdmin
     ]
 
+
+data PlayerWithToken =
+  PlayerWithToken
+  { _pwtId       :: PlayerId
+  , _pwtEmail    :: Text
+  , _pwtName     :: Text
+  , _pwtPassword :: Text
+  , _pwtIsAdmin  :: Maybe Bool
+  , _pwtToken    :: Token
+  }
+  deriving (Eq, Show)
+
+instance FromJSON PlayerWithToken where
+  parseJSON =
+    withObject "PlayerWithToken" $ \v ->
+      PlayerWithToken <$>
+      v .: "id" <*>
+      v .: "email" <*>
+      v .: "name" <*>
+      v .: "password" <*>
+      v .: "isAdmin" <*>
+      v .: "token"
+
+instance ToJSON PlayerWithToken where
+  toJSON PlayerWithToken{..} =
+    object
+    [ "id" .= _pwtId
+    , "email" .= _pwtEmail
+    , "name" .= _pwtName
+    , "password" .= _pwtPassword
+    , "isAdmin" .= _pwtIsAdmin
+    , "token" .= _pwtToken
+    ]
+
+
 -- | Match used in requests.
 data RqMatch
   = RqMatch

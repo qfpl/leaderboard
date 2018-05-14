@@ -4,6 +4,9 @@
 
 module Leaderboard.RegistrationTests
   ( registrationTests
+  , cRegisterFirst
+  , cRegister
+  , cGetPlayerCount
   ) where
 
 import           Control.Monad.IO.Class    (liftIO)
@@ -19,7 +22,8 @@ import           Hedgehog                  (Callback (..), Command (Command),
                                             Gen, HTraversable (htraverse),
                                             PropertyT, Var (Var), annotateShow,
                                             assert, concrete, executeSequential,
-                                            failure, forAll, property, (===))
+                                            failure, forAll, property, success,
+                                            (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -113,10 +117,10 @@ newtype RegFirstForbidden (v :: * -> *) =
 instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
-cRegFirst
+cRegisterFirst
   :: ClientEnv
   -> Command Gen (PropertyT IO) LeaderboardState
-cRegFirst env =
+cRegisterFirst env =
   let
     gen (LeaderboardState ps _as _ms) =
       bool Nothing (Just $ RegFirst <$> genRegPlayerRandomAdmin ps) $ null ps
@@ -131,10 +135,10 @@ cRegFirst env =
     , Ensure $ \_sOld (LeaderboardState psNew _as _ms) (RegFirst _rp) _t -> length psNew === 1
     ]
 
-cRegFirstForbidden
+cRegisterFirstForbidden
   :: ClientEnv
   -> Command Gen (PropertyT IO) LeaderboardState
-cRegFirstForbidden env =
+cRegisterFirstForbidden env =
   let
     gen (LeaderboardState ps _as _ms) =
       bool (Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin ps) Nothing $ null ps
@@ -165,8 +169,10 @@ cRegister
   -> Command Gen (PropertyT IO) LeaderboardState
 cRegister env =
   let
-    gen rs@(LeaderboardState ps _as _ms) =
-      (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminToken rs
+    gen rs@(LeaderboardState ps as _ms) =
+      if null as
+      then Nothing
+      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminToken rs
     execute (Register rp token) =
       successClient show env . fmap fromLbToken $ register (concrete token) rp
   in
@@ -181,8 +187,19 @@ cRegister env =
               _         -> as
         in
           LeaderboardState newPlayers newAdmins ms
-    , Ensure $ \(LeaderboardState psOld _asOld _msOld) (LeaderboardState psNew _asNew _msNew) _input _output ->
+    , Ensure $ \(LeaderboardState psOld asOld _msOld)
+                (LeaderboardState psNew asNew _msNew)
+                (Register LeaderboardRegistration{..} _t)
+                _output -> do
+        assert $ M.member _lbrEmail psNew
+        assert $ M.notMember _lbrEmail psOld
         length psNew === length psOld + 1
+        case _lbrIsAdmin of
+          Just True -> do
+            assert $ S.member _lbrEmail asNew
+            assert $ S.notMember _lbrEmail asOld
+            length asNew === length asOld + 1
+          _ -> success
     ]
 
 initialState
@@ -197,7 +214,7 @@ propRegFirst
 propRegFirst env truncateTables =
   testProperty "register-first" . property $ do
   liftIO truncateTables
-  let cs = ($ env) <$> [cRegFirst, cGetPlayerCount, cRegFirstForbidden]
+  let cs = ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState cs
   executeSequential initialState commands
@@ -209,7 +226,7 @@ propRegister
 propRegister env truncateTables =
   testProperty "register-counts" . property $ do
   liftIO truncateTables
-  let cs = ($ env) <$> [cRegister, cRegFirst, cRegFirstForbidden, cGetPlayerCount]
+  let cs = ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
   commands <- forAll $
     Gen.sequential (Range.linear 1 100) initialState cs
   executeSequential initialState commands

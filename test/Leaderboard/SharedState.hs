@@ -3,9 +3,7 @@
 
 module Leaderboard.SharedState where
 
-import           Control.Applicative    (liftA3)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Bool              (bool)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
 import           Data.Text              (Text)
@@ -13,29 +11,24 @@ import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
 
-import           Hedgehog               (Eq1, Show1, Var, MonadGen)
+import           Hedgehog               (Eq1, MonadGen, Show1, Var)
 import qualified Hedgehog.Gen           as Gen
 
-import           Leaderboard.Schema     (Match)
+import           Leaderboard.Schema     (PlayerId)
+import           Leaderboard.Types      (RqMatch)
 
 -- | Map emails to players and keep a set of admin emails
 data LeaderboardState (v :: * -> *) =
-  LeaderboardState (PlayerMap v) (S.Set Text) (MatchMap v)
+  LeaderboardState
+  {_players :: PlayerMap v
+  , _admins  :: S.Set Text
+  , _matches :: MatchMap v
+  }
 deriving instance Show1 v => Show (LeaderboardState v)
 deriving instance Eq1 v => Eq (LeaderboardState v)
 
 type PlayerMap v = M.Map Text (PlayerWithToken v)
-type MatchMap v = M.Map (Var Int v) Match
-
-data PlayerWithToken v =
-  PlayerWithToken
-  { _pwtEmail    :: Text
-  , _pwtName     :: Text
-  , _pwtPassword :: Text
-  , _pwtIsAdmin  :: Maybe Bool
-  , _pwtToken    :: Var Token v
-  }
-  deriving (Eq, Show)
+type MatchMap v = M.Map (Var Int v) RqMatch
 
 failureClient
   :: MonadIO m
@@ -62,17 +55,18 @@ genAdminToken
   => LeaderboardState v
   -> Maybe (n (Var Token v))
 genAdminToken (LeaderboardState ps as _ms) =
-  let
-    -- Emails in admin _must_ be a subset of those in players. Without a Traversable
-    -- instance for Gen I couldn't make this be not partial.
-    f = _pwtToken . (M.!) ps
-    mGEmail =  bool (pure . Gen.element . S.toList $ as) Nothing $ S.null as
-  in
-    fmap (fmap f) mGEmail
+  -- TODO ajmccluskey: be better
+  -- Emails in admin _must_ be a subset of those in players. Without a Traversable
+  -- instance for Gen I couldn't make this be not partial.
+  if null as
+  then Nothing
+  else pure $ _playerToken . (M.!) ps <$> (Gen.element . S.toList $ as)
 
 genPlayerToken
   :: MonadGen n
   => PlayerMap v
   -> Maybe (n (Var Token v))
-genPlayerToken =
-  liftA3 bool (pure . fmap (_pwtToken . snd) . Gen.element . M.toList) (const Nothing) null
+genPlayerToken ps =
+  if null ps
+  then Nothing
+  else pure . fmap (_playerToken . snd) . Gen.element . M.toList $ ps
