@@ -126,8 +126,8 @@ cMe env =
     exe (Me pwr) = successClient show env $ me (clientToken pwr)
   in
     Command gen exe
-    [ Require $ \(LeaderboardState ps _as _ms) _input -> not (null ps)
-    , Require $ \(LeaderboardState ps _as _ms) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
+    [ Require $ \(LeaderboardState ps _as _ms) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
+    , Require $ \(LeaderboardState _ps as _ms) _in -> not (null as)
     , Ensure $ \(LeaderboardState ps _as _ms) _sNew _i p@Player{..} -> do
         let
           pwr@PlayerWithRsp{..} = ps M.! _playerEmail
