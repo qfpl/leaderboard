@@ -76,7 +76,7 @@ playerServer
 playerServer jwts =
        register jwts
   :<|> registerFirst jwts
-  :<|> getPlayer
+  :<|> me
   :<|> authenticate jwts
   :<|> playerCount
 
@@ -128,14 +128,15 @@ registerFirst jwts rp =
       Log.info "registerFirst called but player(s) already registered"
       throwError $ err403 { errBody = "First user already added." }
     Left e -> do
-      Log.error . T.pack . show $ e
+      Log.error $ "While inserting player (email = '" <> _lbrEmail rp <> "'): " <> T.pack (show e)
       throwError err500
     Right p@Player{..} -> do
       pId <- playerId p
+      Log.debug $ "Inserted new player: " <> T.pack (show p)
       token <- makeToken jwts pId
       pure $ RspPlayer (LS.PlayerId _playerId) token
 
-getPlayer
+me
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
      , MonadReader r m
@@ -144,7 +145,7 @@ getPlayer
      )
   => AuthResult PlayerSession
   -> m Player
-getPlayer arp =
+me arp =
   withAuthConnAndLog arp "/players/me" $ \pId conn -> do
     ePlayer <- liftIO $ selectPlayerById conn pId
     case ePlayer of
