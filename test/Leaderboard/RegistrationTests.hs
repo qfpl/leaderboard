@@ -185,7 +185,10 @@ cRegister env =
       successClient show env $ register (clientToken p) rp
   in
     Command gen execute [
-      Require $ \(LeaderboardState _ps as _ms) _input -> not (null as)
+      Require $ \(LeaderboardState ps _as _ms) (Register rp _p) ->
+        M.notMember (_lbrEmail rp) ps
+    , Require $ \(LeaderboardState _ps as _ms) (Register _rp p) ->
+        S.member (_pwrEmail p) as
     , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) rsp ->
         let
           newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
@@ -223,6 +226,6 @@ propRegister
   -> IO ()
   -> TestTree
 propRegister env reset =
-  checkCommands "register" reset emptyState $
+  checkCommands "register-all" reset emptyState $
     ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
 

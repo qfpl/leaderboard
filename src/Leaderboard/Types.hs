@@ -110,7 +110,7 @@ instance ToJSON Token where
 data RegisterPlayer
   = LeaderboardRegistration
     { _lbrEmail    :: Text
-    , _lbrUsername     :: Text
+    , _lbrUsername :: Text
     , _lbrPassword :: Text
     , _lbrIsAdmin  :: Maybe Bool
     }
