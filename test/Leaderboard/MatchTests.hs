@@ -21,11 +21,10 @@ import           Hedgehog                      (Callback (..),
                                                 Command (Command),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
-                                                MonadGen, MonadTest,
-                                                Var (Var), assert,
-                                                concrete, executeSequential,
-                                                failure, forAll, property,
-                                                (===))
+                                                MonadGen, MonadTest, Var (Var),
+                                                assert, concrete,
+                                                executeSequential, failure,
+                                                forAll, property, (===))
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 
@@ -36,7 +35,8 @@ import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, PlayerWithRsp (..),
                                                 TestMatch (..), clientToken,
-                                                failureClient, genPlayerWithRsp,
+                                                emptyState, failureClient,
+                                                genPlayerWithRsp, genTimestamp,
                                                 successClient, testToRq)
 import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
@@ -69,22 +69,6 @@ genTwoPlayersWithRsps ps =
     p2 <- Gen.filter ((/= _pwrEmail p1) . _pwrEmail) genPlayerJust
     pure (p1, p2)
 
-genTimeStamp
-  :: MonadGen n
-  => n UTCTime
-genTimeStamp =
-  let
-    gYear = Gen.int (Range.linearFrom 2000 1970 2100)
-    gMonth = Gen.int (Range.linear 1 12)
-    -- fromGregorian automatically trims to valid dates, so 2001-02-31 becomes 2001-02-28
-    gDay = Gen.int (Range.linear 1 31)
-    hToS = (* 3600)
-    gSeconds = Gen.int (Range.linearFrom (hToS 12) 0 86400)
-    gUTCTimeDay = fromGregorian . fromIntegral <$> gYear <*> gMonth <*> gDay
-    gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
-  in
-    UTCTime <$> gUTCTimeDay <*> gDiffTime
-
 genMatch
   :: MonadGen n
   => PlayerMap v
@@ -99,7 +83,7 @@ genMatch ps =
       <*> fmap (_pwrRsp . snd) genPair
       <*> Gen.int (Range.linear 1 100)
       <*> Gen.int (Range.linear 1 100)
-      <*> genTimeStamp
+      <*> genTimestamp
 
 -- Add a match record. Takes a test record containing RspPlayers for the two
 -- players who played, and the token of the user adding the match.
@@ -140,11 +124,6 @@ cAddMatch env =
 
 cListMatches = undefined
 
-initialState
-  :: LeaderboardState (v :: * -> *)
-initialState =
-  LeaderboardState M.empty S.empty M.empty
-
 propMatchTests
   :: ClientEnv
   -> IO ()
@@ -152,7 +131,7 @@ propMatchTests
 propMatchTests env resetDb =
   testProperty "matches" . property $ do
   liftIO resetDb
-  let cs = ($ env) <$> [cRegisterFirst, cRegister, cAddMatch] --, cListMatches]
+  let cs = ($ env) <$> [cRegisterFirst, cRegister, cAddMatch]
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState cs
-  executeSequential initialState commands
+    Gen.sequential (Range.linear 1 100) emptyState cs
+  executeSequential emptyState commands

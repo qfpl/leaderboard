@@ -8,7 +8,8 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
 import           Data.Text              (Text)
-import           Data.Time              (UTCTime)
+import           Data.Time              (UTCTime (UTCTime), fromGregorian,
+                                         secondsToDiffTime)
 import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
@@ -17,6 +18,7 @@ import           Hedgehog               (Concrete, Eq1,
                                          HTraversable (htraverse), MonadGen,
                                          Show1, Var (Var), concrete)
 import qualified Hedgehog.Gen           as Gen
+import qualified Hedgehog.Range         as Range
 
 import           Leaderboard.TestClient (fromLbToken)
 import           Leaderboard.Types      (RqMatch (..), RspPlayer (..))
@@ -30,6 +32,11 @@ data LeaderboardState (v :: * -> *) =
   }
 deriving instance Show1 v => Show (LeaderboardState v)
 deriving instance Eq1 v => Eq (LeaderboardState v)
+
+emptyState
+  :: LeaderboardState (v :: * -> *)
+emptyState =
+  LeaderboardState M.empty S.empty M.empty
 
 type PlayerMap v = M.Map Text (PlayerWithRsp v)
 type MatchMap v = M.Map (Var Int v) (TestMatch v)
@@ -125,3 +132,19 @@ genPlayerWithRsp ps =
   if null ps
   then Nothing
   else pure . fmap snd . Gen.element . M.toList $ ps
+
+genTimestamp
+  :: MonadGen n
+  => n UTCTime
+genTimestamp =
+  let
+    gYear = Gen.int (Range.linearFrom 2000 1970 2100)
+    gMonth = Gen.int (Range.linear 1 12)
+    -- fromGregorian automatically trims to valid dates, so 2001-02-31 becomes 2001-02-28
+    gDay = Gen.int (Range.linear 1 31)
+    hToS = (* 3600)
+    gSeconds = Gen.int (Range.linearFrom (hToS 12) 0 86400)
+    gUTCTimeDay = fromGregorian . fromIntegral <$> gYear <*> gMonth <*> gDay
+    gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
+  in
+    UTCTime <$> gUTCTimeDay <*> gDiffTime

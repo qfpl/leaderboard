@@ -28,7 +28,7 @@ import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
+import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap, emptyState,
                                             PlayerWithRsp (..), clientToken,
                                             failureClient, genAdminWithRsp,
                                             successClient)
@@ -203,11 +203,6 @@ cRegister env =
           _ -> success
     ]
 
-initialState
-  :: LeaderboardState (v :: * -> *)
-initialState =
-  LeaderboardState M.empty S.empty M.empty
-
 propRegFirst
   :: ClientEnv
   -> IO ()
@@ -217,8 +212,8 @@ propRegFirst env truncateTables =
   liftIO truncateTables
   let cs = ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState cs
-  executeSequential initialState commands
+    Gen.sequential (Range.linear 1 100) emptyState cs
+  executeSequential emptyState commands
 
 propRegister
   :: ClientEnv
@@ -229,6 +224,6 @@ propRegister env truncateTables =
   liftIO truncateTables
   let cs = ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
   commands <- forAll $
-    Gen.sequential (Range.linear 1 100) initialState cs
-  executeSequential initialState commands
+    Gen.sequential (Range.linear 1 100) emptyState cs
+  executeSequential emptyState commands
 
