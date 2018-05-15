@@ -9,6 +9,7 @@ module Leaderboard.MatchTests
   ) where
 
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Data.Aeson                    (encode)
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
 import           Data.Time                     (fromGregorian,
@@ -21,7 +22,7 @@ import           Hedgehog                      (Callback (..),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
                                                 MonadGen, MonadTest, Var (Var),
-                                                assert, concrete,
+                                                annotateShow, assert, concrete,
                                                 executeSequential, failure,
                                                 forAll, property, (===))
 import qualified Hedgehog.Gen                  as Gen
@@ -107,12 +108,17 @@ cAddMatch env =
       gMatch <- genMatch ps
       gTokenPlayer <- genPlayerWithRsp ps
       pure $ AddMatch <$> gMatch <*> gTokenPlayer
-    exe (AddMatch tm pwr) =
-      successClient show env . add (mkMatchClient (clientToken $ pwr)) . testToRq $ tm
+    exe (AddMatch tm pwr) = do
+      let rm = testToRq tm
+      annotateShow rm
+      annotateShow $ encode rm
+      successClient show env . add (mkMatchClient (clientToken $ pwr)) $ rm
   in
     Command gen exe [
       -- Need a token, and need a player and their opponent
       Require $ \(LeaderboardState ps _as _ms) _input -> length ps >= 2
+    , Require $ \_s (AddMatch TestMatch{..} _p) ->
+        _tmPlayer1 /= _tmPlayer2
     , Update $ \(LeaderboardState ps as ms) (AddMatch tm _pwr) vId ->
         LeaderboardState ps as $ M.insert vId tm ms
     , Ensure $ \(LeaderboardState _ps _as msOld) (LeaderboardState _ps' _as' msNew) _in mId -> do
