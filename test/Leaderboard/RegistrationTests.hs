@@ -9,30 +9,34 @@ module Leaderboard.RegistrationTests
   , cGetPlayerCount
   ) where
 
-import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.IO.Class    (MonadIO, liftIO)
 import           Data.Bool                 (bool)
 import qualified Data.Map                  as M
+import           Data.Maybe                (fromMaybe)
 import           Data.Semigroup            ((<>))
 import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            HTraversable (htraverse),
-                                            PropertyT, Var (Var), annotateShow,
-                                            assert, executeSequential, failure,
-                                            forAll, property, success, (===), MonadGen, GenT, test)
+                                            GenT, HTraversable (htraverse),
+                                            MonadGen, MonadTest, PropertyT,
+                                            Var (Var), annotateShow, assert,
+                                            executeSequential, failure, forAll,
+                                            property, success, test, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap, emptyState,
-                                            PlayerWithRsp (..), clientToken,
+import           Leaderboard.Schema        (PlayerT (..))
+import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
+                                            PlayerWithRsp (..), checkCommands,
+                                            clientToken, emptyState,
                                             failureClient, genAdminWithRsp,
-                                            successClient, checkCommands)
-import           Leaderboard.TestClient    (getPlayerCount, register,
+                                            genPlayerWithRsp, successClient)
+import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
                                             RegisterPlayer (..), RspPlayer (..))
@@ -53,7 +57,7 @@ genRegPlayerRandomAdmin
   -> n RegisterPlayer
 genRegPlayerRandomAdmin ps =
   let
-    genNonEmptyUnicode = Gen.text (Range.linear 1 100) Gen.unicode
+    genNonEmptyUnicode = Gen.text (Range.linear 1 20) Gen.alphaNum
   in
     LeaderboardRegistration
       <$> Gen.filter (`S.notMember` M.keysSet ps) genNonEmptyUnicode
@@ -100,6 +104,40 @@ cGetPlayerCount env =
         annotateShow as
         length ps === fromIntegral c
         assert $ length ps >= length as
+    ]
+
+newtype Me (v :: * -> *) =
+  Me (PlayerWithRsp v)
+  deriving (Eq, Show)
+instance HTraversable Me where
+  htraverse f (Me pwr) = Me <$> htraverse f pwr
+
+cMe
+  :: ( MonadGen n
+     , MonadTest m
+     , MonadIO m
+     )
+  => ClientEnv
+  -> Command n m LeaderboardState
+cMe env =
+  let
+    gen (LeaderboardState ps _as _ms) = bool (fmap Me <$> genPlayerWithRsp ps) Nothing $ null ps
+    exe (Me pwr) = successClient show env $ me (clientToken pwr)
+  in
+    Command gen exe
+    [ Require $ \(LeaderboardState ps _as _ms) _input -> not (null ps)
+    , Require $ \(LeaderboardState ps _as _ms) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
+    , Ensure $ \(LeaderboardState ps _as _ms) _sNew _i p@Player{..} -> do
+        let
+          pwr@PlayerWithRsp{..} = ps M.! _playerEmail
+          -- If there's only one user it should be an admin regardless of what we input
+          pwrAdmin = bool (fromMaybe False _pwrIsAdmin) True $ length ps == 1
+        annotateShow $ length ps
+        annotateShow pwr
+        annotateShow p
+        _pwrUsername === _playerUsername
+        _pwrEmail === _playerEmail
+        pwrAdmin === _playerIsAdmin
     ]
 
 --------------------------------------------------------------------------------
@@ -227,5 +265,5 @@ propRegister
   -> TestTree
 propRegister env reset =
   checkCommands "register-all" reset emptyState $
-    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
+    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
 

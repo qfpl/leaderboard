@@ -35,7 +35,9 @@ import           Servant.Auth.Server                    (Auth, AuthResult,
                                                          JWTSettings, makeJWT)
 
 import           Leaderboard.Env                        (HasDbConnPool,
-                                                         asPlayer, withConn)
+                                                         asPlayer,
+                                                         withAuthConnAndLog,
+                                                         withConn)
 import           Leaderboard.Queries                    (insertPlayer,
                                                          selectPlayerByEmail,
                                                          selectPlayerById,
@@ -51,10 +53,13 @@ import           Leaderboard.Types                      (LeaderboardError (Playe
                                                          Token (..))
 
 type PlayerAPI auths =
+  "player" :> (
        Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
+  :<|> Auth auths PlayerSession :> "me" :> Get '[JSON] Player
   :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] Token
   :<|> "player-count" :> Get '[JSON] PlayerCount
+  )
 
 playerAPI :: Proxy (PlayerAPI auths)
 playerAPI = Proxy
@@ -71,6 +76,7 @@ playerServer
 playerServer jwts =
        register jwts
   :<|> registerFirst jwts
+  :<|> getPlayer
   :<|> authenticate jwts
   :<|> playerCount
 
@@ -128,6 +134,25 @@ registerFirst jwts rp =
       pId <- playerId p
       token <- makeToken jwts pId
       pure $ RspPlayer (LS.PlayerId _playerId) token
+
+getPlayer
+  :: ( HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     , MonadError ServantErr m
+     , MonadLog Label m
+     )
+  => AuthResult PlayerSession
+  -> m Player
+getPlayer arp =
+  withAuthConnAndLog arp "/players/me" $ \pId conn -> do
+    ePlayer <- liftIO $ selectPlayerById conn pId
+    case ePlayer of
+      Left e -> do
+        Log.info $ "Failed authentication: " <> T.pack (show e)
+        throwError $ err401 { errBody = "Please try reauthenticating" }
+      Right p -> pure p
+
 
 authenticate
   :: ( HasDbConnPool r

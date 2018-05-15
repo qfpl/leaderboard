@@ -6,7 +6,9 @@ module Leaderboard.Env where
 
 import           Control.Lens                (re, set, view)
 import           Control.Monad               (join)
-import           Control.Monad.Except         (MonadError, throwError)
+import           Control.Monad.Except        (MonadError, throwError)
+import           Control.Monad.Log           (MonadLog)
+import           Control.Monad.Log.Label     (Label (Label), withLabel)
 import           Control.Monad.Reader        (MonadReader, asks)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Crypto.Hash                 (Digest, SHA256)
@@ -15,6 +17,7 @@ import           Crypto.JOSE                 (JWK,
                                               base64url, digest, genJWK, jwkKid,
                                               thumbprint)
 import           Data.Pool                   (Pool, withResource)
+import           Data.Text                   (Text)
 import           Data.Text.Strict.Lens       (utf8)
 import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     (ServantErr, err401, errBody)
@@ -49,6 +52,22 @@ withConn
   -> m a
 withConn f =
   join . asks $ (`withResource` f) . dbConnPool
+
+withAuthConnAndLog
+  :: ( MonadError ServantErr m
+     , MonadLog Label m
+     , HasDbConnPool r
+     , MonadBaseControl IO m
+     , MonadReader r m
+     )
+  => AuthResult PlayerSession
+  -> Text
+  -> (Int -> Connection -> m a)
+  -> m a
+withAuthConnAndLog arp label f =
+  asPlayer arp $ \pId ->
+  withLabel (Label label) $
+  withConn $ \conn -> f pId conn
 
 genJwk
   :: IO JWK

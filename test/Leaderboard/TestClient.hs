@@ -11,19 +11,19 @@ import           Servant.Client         (ClientM, client)
 
 import           Leaderboard.API.Match  (MatchAPI, matchAPI)
 import           Leaderboard.API.Player (PlayerAPI, playerAPI)
-import           Leaderboard.Schema     (Match, MatchId)
+import           Leaderboard.Schema     (Match, MatchId, Player)
 import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
                                          RqMatch, RspPlayer, Token (..))
 
 -- TODO ajmccluskey: probs nice to have this in the main lib rather than test code.
 register       :: SAC.Token -> RegisterPlayer -> ClientM RspPlayer
 registerFirst  :: RegisterPlayer -> ClientM RspPlayer
+me             :: SAC.Token -> ClientM Player
 authenticate   :: Login -> ClientM Token
 getPlayerCount :: ClientM PlayerCount
-(register :<|> registerFirst :<|> authenticate :<|> getPlayerCount) =
+(register :<|> registerFirst :<|> me :<|> authenticate :<|> getPlayerCount) =
   -- Servant.Client version doesn't do cookie jar for us, so just stick to JWT
   client (playerAPI :: Proxy (PlayerAPI '[JWT]))
-
 
 data MatchClient =
   MatchClient

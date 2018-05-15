@@ -10,12 +10,12 @@ import           Control.Monad.Except        (MonadError, throwError)
 import           Control.Monad.IO.Class      (liftIO)
 import           Control.Monad.Log           (MonadLog)
 import qualified Control.Monad.Log           as Log
-import           Control.Monad.Log.Label     (Label (Label), withLabel)
+import           Control.Monad.Log.Label     (Label)
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.Proxy                  (Proxy (Proxy))
 import           Data.Semigroup              ((<>))
-import           Data.Text                   (Text, pack)
+import           Data.Text                   (pack)
 import           Database.Beam               (Auto (Auto))
 import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
@@ -25,7 +25,7 @@ import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
                                               ServerT, err500, errBody)
 import           Servant.Auth.Server         (Auth, AuthResult)
 
-import           Leaderboard.Env             (HasDbConnPool, asPlayer, withConn)
+import           Leaderboard.Env             (HasDbConnPool, withAuthConnAndLog)
 import           Leaderboard.Queries         (insertMatch, selectMatch,
                                               selectMatches)
 import           Leaderboard.Schema          (Match, MatchId)
@@ -71,7 +71,7 @@ addMatch
   -> RqMatch
   -> m Int
 addMatch arp match =
-  withAuthConnAndLog arp "/matches/add" $ \conn -> do
+  withAuthConnAndLog arp "/matches/add" $ \_pId conn -> do
   let
     bad e = do
       Log.error $ "Error inserting player: " <> (pack . show $ e)
@@ -117,7 +117,7 @@ getMatch'es
   -> (Connection -> IO (Either LeaderboardError a))
   -> m a
 getMatch'es arp f =
-  withAuthConnAndLog arp "/matches/list" $ \conn -> do
+  withAuthConnAndLog arp "/matches/list" $ \_pId conn -> do
   let
     bad e = do
       Log.error $ "Error retrieving match(es): " <> (pack . show $ e)
@@ -151,22 +151,6 @@ editMatch
   -> m NoContent
 editMatch =
   undefined
-
-withAuthConnAndLog
-  :: ( MonadError ServantErr m
-     , MonadLog Label m
-     , HasDbConnPool r
-     , MonadBaseControl IO m
-     , MonadReader r m
-     )
-  => AuthResult PlayerSession
-  -> Text
-  -> (Connection -> m a)
-  -> m a
-withAuthConnAndLog arp label f =
-  asPlayer arp $ \_pId ->
-  withLabel (Label label) $
-  withConn $ \conn -> f conn
 
 matchId
   :: MonadError ServantErr m
