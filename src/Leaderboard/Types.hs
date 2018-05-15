@@ -15,7 +15,7 @@ import           Data.Bifunctor             (first)
 import           Data.ByteString            (ByteString)
 import           Data.Text                  (Text)
 import           Data.Text.Encoding         (decodeUtf8, encodeUtf8)
-import           Data.Time                  (UTCTime)
+import           Data.Time                  (LocalTime)
 import           Database.PgErrors          (PostgresException, tryJustPg)
 import qualified Database.PostgreSQL.Simple as Pg
 import           GHC.Generics               (Generic)
@@ -164,7 +164,7 @@ data RqMatch
   , _matchPlayer2      :: PlayerId
   , _matchPlayer1Score :: Int
   , _matchPlayer2Score :: Int
-  , _matchTime         :: UTCTime
+  , _matchTime         :: LocalTime
   }
   deriving (Eq, Show)
 

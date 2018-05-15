@@ -11,8 +11,7 @@ module Leaderboard.MatchTests
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import qualified Data.Map                      as M
 import qualified Data.Set                      as S
-import           Data.Time                     (UTCTime (UTCTime),
-                                                fromGregorian,
+import           Data.Time                     (fromGregorian,
                                                 secondsToDiffTime)
 import           Data.Traversable              (sequenceA)
 import           Servant.Client                (ClientEnv)

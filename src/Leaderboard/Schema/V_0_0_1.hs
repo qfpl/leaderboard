@@ -18,7 +18,7 @@ import           Data.Aeson                     (FromJSON (..), ToJSON (..),
 import           Data.ByteString                (ByteString)
 import           Data.Text                      (Text)
 import           Data.Text.Encoding             (decodeUtf8, encodeUtf8)
-import           Data.Time                      (UTCTime)
+import           Data.Time                      (LocalTime)
 import           Database.Beam                  (Auto (Auto), Beamable, C,
                                                  Database, Generic, Identity,
                                                  PrimaryKey,
@@ -130,7 +130,7 @@ data MatchT f
   , _matchPlayer2      :: PrimaryKey PlayerT f
   , _matchPlayer1Score :: C f Int
   , _matchPlayer2Score :: C f Int
-  , _matchTime         :: C f UTCTime
+  , _matchTime         :: C f LocalTime
   }
   deriving (Generic)
 
