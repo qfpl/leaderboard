@@ -15,15 +15,13 @@ import qualified Data.Map                  as M
 import           Data.Semigroup            ((<>))
 import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
-import           Servant.Auth.Client       (Token)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
                                             Gen, HTraversable (htraverse),
                                             PropertyT, Var (Var), annotateShow,
-                                            assert, concrete, executeSequential,
-                                            failure, forAll, property, success,
-                                            (===))
+                                            assert, executeSequential, failure,
+                                            forAll, property, success, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -31,10 +29,11 @@ import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
 import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
-                                            PlayerWithRsp (..), failureClient,
-                                            genAdminRsp, successClient)
-import           Leaderboard.TestClient    (fromLbToken, getPlayerCount,
-                                            register, registerFirst)
+                                            PlayerWithRsp (..), clientToken,
+                                            failureClient, genAdminWithRsp,
+                                            successClient)
+import           Leaderboard.TestClient    (getPlayerCount, register,
+                                            registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
                                             RegisterPlayer (..), RspPlayer (..))
 
@@ -67,19 +66,13 @@ mkPlayerWithRsp
   -> PlayerWithRsp v
 mkPlayerWithRsp LeaderboardRegistration{..} rsp =
   let
-    _pwtRsp = rsp
-    _pwtEmail = _lbrEmail
-    _pwtUsername = _lbrUsername
-    _pwtPassword = _lbrPassword
-    _pwtIsAdmin = _lbrIsAdmin
+    _pwrRsp = rsp
+    _pwrEmail = _lbrEmail
+    _pwrUsername = _lbrUsername
+    _pwrPassword = _lbrPassword
+    _pwrIsAdmin = _lbrIsAdmin
   in
     PlayerWithRsp{..}
-
-clientToken
-  :: RspPlayer
-  -> Token
-clientToken RspPlayer{..} =
-  fromLbToken _rspToken
 
 --------------------------------------------------------------------------------
 -- PLAYER COUNT
@@ -165,10 +158,12 @@ cRegisterFirstForbidden env =
 --------------------------------------------------------------------------------
 
 data Register (v :: * -> *) =
-  Register RegisterPlayer (Var RspPlayer v)
+  Register RegisterPlayer (PlayerWithRsp v)
   deriving (Eq, Show)
 instance HTraversable Register where
-  htraverse f (Register rp (Var gt)) = Register rp . Var <$> f gt
+  htraverse f (Register rp PlayerWithRsp{..}) =
+    let mkFP (Var rsp) = fmap (\_pwrRsp -> PlayerWithRsp{..}) $ Var <$> f rsp
+     in Register rp <$> mkFP _pwrRsp
 
 cRegister
   :: ClientEnv
@@ -178,9 +173,9 @@ cRegister env =
     gen rs@(LeaderboardState ps as _ms) =
       if null as
       then Nothing
-      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminRsp rs
-    execute (Register rp rsp) =
-      successClient show env $ register (clientToken . concrete $ rsp) rp
+      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminWithRsp rs
+    execute (Register rp p) =
+      successClient show env $ register (clientToken p) rp
   in
     Command gen execute [
       Require $ \(LeaderboardState _ps as _ms) _input -> not (null as)

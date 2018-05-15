@@ -1,4 +1,6 @@
+{-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -13,17 +15,14 @@ import           Data.Time                     (UTCTime (UTCTime),
                                                 fromGregorian,
                                                 secondsToDiffTime)
 import           Data.Traversable              (sequenceA)
-import           Database.Beam                 (Auto (..))
-import           Servant.Auth.Client           (Token)
-import           Servant.Client                (ClientEnv, ClientM,
-                                                ServantError (..), runClientM)
+import           Servant.Client                (ClientEnv)
 
 import           Hedgehog                      (Callback (..),
                                                 Command (Command),
-                                                Concrete (Concrete), Gen,
+                                                Concrete (Concrete),
                                                 HTraversable (htraverse),
-                                                MonadGen, MonadTest, PropertyT,
-                                                Var (Var), annotateShow, assert,
+                                                MonadGen, MonadTest,
+                                                Var (Var), assert,
                                                 concrete, executeSequential,
                                                 failure, forAll, property,
                                                 (===))
@@ -34,12 +33,11 @@ import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
-import           Leaderboard.Schema            (Match (..), MatchT (..),
-                                                PlayerId (..), PlayerT (..))
-import qualified Leaderboard.Schema            as LS
 import           Leaderboard.SharedState       (LeaderboardState (..),
-                                                PlayerMap, failureClient,
-                                                genPlayerRsp, successClient)
+                                                PlayerMap, PlayerWithRsp (..),
+                                                TestMatch (..), clientToken,
+                                                failureClient, genPlayerWithRsp,
+                                                successClient, testToRq)
 import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
                                                 register, registerFirst)
@@ -55,21 +53,21 @@ matchTests resetDb env =
     propMatchTests env resetDb
   ]
 
-genTwoPlayerIds
+genTwoPlayersWithRsps
   :: MonadGen n
   => PlayerMap v
-  -> Maybe (n (PlayerId, PlayerId))
-genTwoPlayerIds ps =
+  -> Maybe (n (PlayerWithRsp v, PlayerWithRsp v))
+genTwoPlayersWithRsps ps =
   if length ps < 2
   then Nothing
   else Just $ do
     -- Beware the Gen.just here. As long as we've checked we have enough players to satisfy generating
     -- the ids we need, then this should be fine. It's not quite partial, but the generator will fail
     -- if it retries too many times.
-    let genPlayerIdJust = Gen.just . sequenceA . fmap (LS.PlayerId . _rspId) . genPlayerRsp $ ps
-    p1Id <- genPlayerIdJust
-    p2Id <- Gen.filter (/= p1Id) genPlayerIdJust
-    pure (p1Id, p2Id)
+    let genPlayerJust = Gen.just . sequenceA . genPlayerWithRsp $ ps
+    p1 <- genPlayerJust
+    p2 <- Gen.filter ((/= _pwrEmail p1) . _pwrEmail) genPlayerJust
+    pure (p1, p2)
 
 genTimeStamp
   :: MonadGen n
@@ -90,24 +88,27 @@ genTimeStamp =
 genMatch
   :: MonadGen n
   => PlayerMap v
-  -> Maybe (n RqMatch)
+  -> Maybe (n (TestMatch v))
 genMatch ps =
   if length ps < 2
   then Nothing
   else do
-    genPair <- genTwoPlayerIds ps
-    pure $ RqMatch
-      <$> fmap fst genPair
-      <*> fmap snd genPair
+    genPair <- genTwoPlayersWithRsps ps
+    pure $ TestMatch
+      <$> fmap (_pwrRsp . fst) genPair
+      <*> fmap (_pwrRsp . snd) genPair
       <*> Gen.int (Range.linear 1 100)
       <*> Gen.int (Range.linear 1 100)
       <*> genTimeStamp
 
+-- Add a match record. Takes a test record containing RspPlayers for the two
+-- players who played, and the token of the user adding the match.
 data AddMatch (v :: * -> *) =
-  AddMatch RqMatch (Var Token v)
+  AddMatch (TestMatch v) (PlayerWithRsp v)
   deriving (Eq, Show)
 instance HTraversable AddMatch where
-  htraverse f (AddMatch rm (Var ht)) = AddMatch rm . Var <$> f ht
+  htraverse f (AddMatch tm pwr) =
+    AddMatch <$> htraverse f tm <*> htraverse f pwr
 
 cAddMatch
   :: ( MonadGen n
@@ -120,16 +121,16 @@ cAddMatch env =
   let
     gen (LeaderboardState ps _as _ms) = do
       gMatch <- genMatch ps
-      gToken <- genPlayerToken ps
-      pure $ AddMatch <$> gMatch <*> gToken
-    exe (AddMatch rm t) =
-      successClient show env $ add (mkMatchClient (concrete t)) rm
+      gTokenPlayer <- genPlayerWithRsp ps
+      pure $ AddMatch <$> gMatch <*> gTokenPlayer
+    exe (AddMatch tm pwr) =
+      successClient show env . add (mkMatchClient (clientToken $ pwr)) . testToRq $ tm
   in
     Command gen exe [
       -- Need a token, and need a player and their opponent
       Require $ \(LeaderboardState ps _as _ms) _input -> length ps >= 2
-    , Update $ \(LeaderboardState ps as ms) (AddMatch rm _t) vId ->
-        LeaderboardState ps as $ M.insert vId rm ms
+    , Update $ \(LeaderboardState ps as ms) (AddMatch tm _pwr) vId ->
+        LeaderboardState ps as $ M.insert vId tm ms
     , Ensure $ \(LeaderboardState _ps _as msOld) (LeaderboardState _ps' _as' msNew) _in mId -> do
         let vmId = Var (Concrete mId)
         assert $ M.member vmId msNew
