@@ -7,6 +7,7 @@ module Leaderboard.Types where
 
 import           Control.Lens               (Lens', lens, makeLenses)
 import           Control.Monad              ((<=<))
+import qualified Control.Monad.Log          as Log
 import           Crypto.JOSE                (JWK)
 import           Data.Aeson                 (FromJSON, ToJSON, object,
                                              parseJSON, toJSON, withObject,
@@ -34,6 +35,7 @@ data ApplicationOptions
   { _dbConnInfo :: Pg.ConnectInfo
   , _port       :: Int
   , _command    :: Command
+  , _logLevel   :: Maybe Log.Level
   }
   deriving (Eq, Show)
 makeLenses ''ApplicationOptions
@@ -137,7 +139,7 @@ instance ToJSON RegisterPlayer where
 
 data RspPlayer =
   RspPlayer
-  { _rspId :: PlayerId
+  { _rspId    :: PlayerId
   , _rspToken :: Token
   }
   deriving (Eq, Show)

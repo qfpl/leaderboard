@@ -6,6 +6,7 @@ import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
                                                 throwTo)
 import           Control.Exception             (Exception, bracket, throw)
 import           Control.Lens                  ((&), (.~))
+import qualified Control.Monad.Log             as Log
 import           Database.Postgres.Temp        (DB (..), StartError,
                                                 startAndLogToTmp, stop)
 import           Network.Connection            (TLSSettings (..))
@@ -39,7 +40,7 @@ main :: IO ()
 main =
   withDb $ \DB{..} -> do
   let
-    ao = ApplicationOptions connectionInfo 7645 RunApp
+    ao = ApplicationOptions connectionInfo 7645 RunApp (Just Log.levelDebug)
     tt = truncateTables connectionInfo
   withLeaderboard ao (defaultMain . allTheTests tt)
 
