@@ -94,15 +94,20 @@ register
 register jwts arp rp =
   withLabel (Label "/register") $
   asPlayer arp $ \psId -> do
+    Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
     ePlayer <- withConn $ \conn -> liftIO $ selectPlayerById conn psId
     case ePlayer of
       Left e -> do
         Log.info $ "Failed authentication: " <> T.pack (show e)
         throwError $ err401 { errBody = "Please try reauthenticating" }
       Right Player{..} ->
-        if _playerIsAdmin
-          then (pure . RspPlayer (LS.PlayerId _playerId) <=< makeToken jwts <=< playerId <=< insertPlayer') rp
-          else throwError $ err401 {errBody = "Must be an admin to register a new player"}
+        if not _playerIsAdmin
+          then throwError $ err401 {errBody = "Must be an admin to register a new player"}
+          else do
+            p@Player{..} <- insertPlayer' rp
+            Log.debug $ "Inserted new player: " <> T.pack (show p)
+            token <- makeToken jwts <=< playerId $ p
+            pure $ RspPlayer (LS.PlayerId _playerId) token
 
 registerFirst
   :: ( HasDbConnPool r
@@ -116,6 +121,7 @@ registerFirst
   -> m RspPlayer
 registerFirst jwts rp =
   withLabel (Label "/register-first") $ do
+  Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
   -- Possible race condition between checking count and inserting -- transaction it
   ep <- withConn $ \conn -> liftIO . withTransactionSerializable conn $ do
     let
@@ -202,7 +208,6 @@ insertPlayer'
   -> m Player
 insertPlayer' rp =
   withLabel (Label "insertPlayer") $ do
-  Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
   let
     throwNoPlayer e = do
       Log.error . T.pack . show $ e
