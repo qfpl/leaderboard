@@ -18,10 +18,10 @@ import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            Gen, HTraversable (htraverse),
+                                            HTraversable (htraverse),
                                             PropertyT, Var (Var), annotateShow,
                                             assert, executeSequential, failure,
-                                            forAll, property, success, (===))
+                                            forAll, property, success, (===), MonadGen, GenT, test)
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -31,7 +31,7 @@ import           Test.Tasty.Hedgehog       (testProperty)
 import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap, emptyState,
                                             PlayerWithRsp (..), clientToken,
                                             failureClient, genAdminWithRsp,
-                                            successClient)
+                                            successClient, checkCommands)
 import           Leaderboard.TestClient    (getPlayerCount, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
@@ -48,8 +48,9 @@ registrationTests truncateTables env =
     ]
 
 genRegPlayerRandomAdmin
-  :: PlayerMap v
-  -> Gen RegisterPlayer
+  :: MonadGen n
+  => PlayerMap v
+  -> n RegisterPlayer
 genRegPlayerRandomAdmin ps =
   let
     genNonEmptyUnicode = Gen.text (Range.linear 1 100) Gen.unicode
@@ -85,8 +86,9 @@ instance HTraversable GetPlayerCount where
   htraverse _ _ = pure GetPlayerCount
 
 cGetPlayerCount
-  :: ClientEnv
-  -> Command Gen (PropertyT IO) LeaderboardState
+  :: MonadGen n
+  => ClientEnv
+  -> Command n (PropertyT IO) LeaderboardState
 cGetPlayerCount env =
   let
     gen _s = Just . pure $ GetPlayerCount
@@ -117,15 +119,18 @@ instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
 cRegisterFirst
-  :: ClientEnv
-  -> Command Gen (PropertyT IO) LeaderboardState
+  :: MonadGen n
+  => ClientEnv
+  -> Command n (PropertyT IO) LeaderboardState
 cRegisterFirst env =
   let
     gen (LeaderboardState ps _as _ms) =
-      bool Nothing (Just $ RegFirst <$> genRegPlayerRandomAdmin ps) $ null ps
+      if null ps
+      then Just $ RegFirst <$> genRegPlayerRandomAdmin ps
+      else Nothing
     execute (RegFirst rp) =
       let mkError = (("Should succeed with token, but got: " <>) . show)
-       in successClient mkError env  $ registerFirst rp
+       in successClient mkError env $ registerFirst rp
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) _input -> null ps
@@ -135,8 +140,9 @@ cRegisterFirst env =
     ]
 
 cRegisterFirstForbidden
-  :: ClientEnv
-  -> Command Gen (PropertyT IO) LeaderboardState
+  :: MonadGen n
+  => ClientEnv
+  -> Command n (PropertyT IO) LeaderboardState
 cRegisterFirstForbidden env =
   let
     gen (LeaderboardState ps _as _ms) =
@@ -166,8 +172,9 @@ instance HTraversable Register where
      in Register rp <$> mkFP _pwrRsp
 
 cRegister
-  :: ClientEnv
-  -> Command Gen (PropertyT IO) LeaderboardState
+  :: MonadGen n
+  => ClientEnv
+  -> Command n (PropertyT IO) LeaderboardState
 cRegister env =
   let
     gen rs@(LeaderboardState ps as _ms) =
@@ -207,23 +214,15 @@ propRegFirst
   :: ClientEnv
   -> IO ()
   -> TestTree
-propRegFirst env truncateTables =
-  testProperty "register-first" . property $ do
-  liftIO truncateTables
-  let cs = ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
-  commands <- forAll $
-    Gen.sequential (Range.linear 1 100) emptyState cs
-  executeSequential emptyState commands
+propRegFirst env reset =
+  checkCommands "register-first" reset emptyState $
+    ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
 
 propRegister
   :: ClientEnv
   -> IO ()
   -> TestTree
-propRegister env truncateTables =
-  testProperty "register-counts" . property $ do
-  liftIO truncateTables
-  let cs = ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
-  commands <- forAll $
-    Gen.sequential (Range.linear 1 100) emptyState cs
-  executeSequential emptyState commands
+propRegister env reset =
+  checkCommands "register" reset emptyState $
+    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
 

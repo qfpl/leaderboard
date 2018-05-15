@@ -33,10 +33,11 @@ import           Test.Tasty.Hedgehog           (testProperty)
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, PlayerWithRsp (..),
-                                                TestMatch (..), clientToken,
-                                                emptyState, failureClient,
-                                                genPlayerWithRsp, genTimestamp,
-                                                successClient, testToRq)
+                                                TestMatch (..), checkCommands,
+                                                clientToken, emptyState,
+                                                failureClient, genPlayerWithRsp,
+                                                genTimestamp, successClient,
+                                                testToRq)
 import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
                                                 register, registerFirst)
@@ -127,10 +128,5 @@ propMatchTests
   :: ClientEnv
   -> IO ()
   -> TestTree
-propMatchTests env resetDb =
-  testProperty "matches" . property $ do
-  liftIO resetDb
-  let cs = ($ env) <$> [cRegisterFirst, cRegister, cAddMatch]
-  commands <- forAll $
-    Gen.sequential (Range.linear 1 100) emptyState cs
-  executeSequential emptyState commands
+propMatchTests env reset =
+  checkCommands "matches" reset emptyState $ ($ env) <$> [cAddMatch, cRegisterFirst, cRegister]

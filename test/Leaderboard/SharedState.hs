@@ -1,6 +1,8 @@
-{-# LANGUAGE KindSignatures     #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Leaderboard.SharedState where
 
@@ -15,11 +17,14 @@ import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
 
-import           Hedgehog               (Concrete, Eq1,
+import           Hedgehog               (Command, Concrete, Eq1, Gen,
                                          HTraversable (htraverse), MonadGen,
-                                         Show1, Var (Var), concrete)
+                                         PropertyT, Show1, Var (Var), concrete,
+                                         executeSequential, forAll, property)
 import qualified Hedgehog.Gen           as Gen
 import qualified Hedgehog.Range         as Range
+import           Test.Tasty             (TestTree)
+import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
 import           Leaderboard.Types      (RqMatch (..), RspPlayer (..))
@@ -151,3 +156,17 @@ genTimestamp =
     gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
   in
     fmap (utcToLocalTime utc) . UTCTime <$> gUTCTimeDay <*> gDiffTime
+
+checkCommands
+  :: forall state.
+     String
+  -> IO ()
+  -> (forall v. state v)
+  -> [Command Gen (PropertyT IO) state]
+  -> TestTree
+checkCommands name reset initialState commands  =
+  testProperty name . property $ do
+  actions <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState commands
+  liftIO reset
+  executeSequential initialState actions
