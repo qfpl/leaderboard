@@ -18,7 +18,7 @@ import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
-import           Hedgehog                  (Callback (..), Command (Command),
+import           Hedgehog                  (Callback (..), Command (Command), concrete,
                                             GenT, HTraversable (htraverse),
                                             MonadGen, MonadTest, PropertyT,
                                             Var (Var), annotateShow, assert,
@@ -31,6 +31,7 @@ import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
 import           Leaderboard.Schema        (PlayerT (..))
+import qualified Leaderboard.Schema        as LS
 import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), checkCommands,
                                             clientToken, emptyState,
@@ -131,10 +132,11 @@ cMe env =
         let
           pwr@PlayerWithRsp{..} = ps M.! _playerEmail
           -- If there's only one user it should be an admin regardless of what we input
-          pwrAdmin = bool (fromMaybe False _pwrIsAdmin) True $ length ps == 1
+          pwrAdmin = fromMaybe False _pwrIsAdmin
         annotateShow $ length ps
         annotateShow pwr
         annotateShow p
+        (_rspId . concrete $ _pwrRsp) === LS.PlayerId _playerId
         _pwrUsername === _playerUsername
         _pwrEmail === _playerEmail
         pwrAdmin === _playerIsAdmin
@@ -168,12 +170,14 @@ cRegisterFirst env =
       else Nothing
     execute (RegFirst rp) =
       let mkError = (("Should succeed with token, but got: " <>) . show)
-       in successClient mkError env $ registerFirst rp
+       -- Force admin flag to true so our local state always aligns with DB
+       in successClient mkError env . registerFirst $ rp {_lbrIsAdmin = Just True}
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) _input -> null ps
     , Update $ \(LeaderboardState _ps _as ms) (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
-        LeaderboardState (M.singleton _lbrEmail (mkPlayerWithRsp lbr rsp)) (S.singleton _lbrEmail) ms
+        let lbr' = lbr {_lbrIsAdmin = Just True}
+         in LeaderboardState (M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)) (S.singleton _lbrEmail) ms
     , Ensure $ \_sOld (LeaderboardState psNew _as _ms) (RegFirst _rp) _t -> length psNew === 1
     ]
 
