@@ -40,7 +40,7 @@ import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
-                                            RegisterPlayer (..), RspPlayer (..))
+                                            RegisterPlayer (..), ResponsePlayer (..))
 
 registrationTests
   :: IO ()
@@ -68,7 +68,7 @@ genRegPlayerRandomAdmin ps =
 
 mkPlayerWithRsp
   :: RegisterPlayer
-  -> Var RspPlayer v
+  -> Var ResponsePlayer v
   -> PlayerWithRsp v
 mkPlayerWithRsp LeaderboardRegistration{..} rsp =
   let

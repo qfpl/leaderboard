@@ -13,11 +13,11 @@ import           Leaderboard.API.Match  (MatchAPI, matchAPI)
 import           Leaderboard.API.Player (PlayerAPI, playerAPI)
 import           Leaderboard.Schema     (Match, MatchId, Player)
 import           Leaderboard.Types      (Login, PlayerCount, RegisterPlayer,
-                                         RqMatch, RspPlayer, Token (..))
+                                         RqMatch, ResponsePlayer, Token (..))
 
 -- TODO ajmccluskey: probs nice to have this in the main lib rather than test code.
-register       :: SAC.Token -> RegisterPlayer -> ClientM RspPlayer
-registerFirst  :: RegisterPlayer -> ClientM RspPlayer
+register       :: SAC.Token -> RegisterPlayer -> ClientM ResponsePlayer
+registerFirst  :: RegisterPlayer -> ClientM ResponsePlayer
 me             :: SAC.Token -> ClientM Player
 authenticate   :: Login -> ClientM Token
 getPlayerCount :: ClientM PlayerCount

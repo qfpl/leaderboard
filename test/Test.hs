@@ -40,7 +40,7 @@ main :: IO ()
 main =
   withDb $ \DB{..} -> do
   let
-    ao = ApplicationOptions connectionInfo 7645 RunApp (Just Log.levelDebug)
+    ao = ApplicationOptions connectionInfo 7645 RunApp (Just Log.levelWarning)
     tt = truncateTables connectionInfo
   withLeaderboard ao (defaultMain . allTheTests tt)
 

@@ -43,7 +43,7 @@ import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
                                                 register, registerFirst)
 import           Leaderboard.Types             (RqMatch (RqMatch),
-                                                RspPlayer (..))
+                                                ResponsePlayer (..))
 
 matchTests
   :: IO ()
@@ -86,7 +86,7 @@ genMatch ps =
       <*> Gen.int (Range.linear 1 100)
       <*> genTimestamp
 
--- Add a match record. Takes a test record containing RspPlayers for the two
+-- Add a match record. Takes a test record containing ResponsePlayers for the two
 -- players who played, and the token of the user adding the match.
 data AddMatch (v :: * -> *) =
   AddMatch (TestMatch v) (PlayerWithRsp v)

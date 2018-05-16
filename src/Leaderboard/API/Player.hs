@@ -49,13 +49,13 @@ import           Leaderboard.Types                      (LeaderboardError (Playe
                                                          PlayerCount (PlayerCount),
                                                          PlayerSession (..),
                                                          RegisterPlayer (..),
-                                                         RspPlayer (..),
+                                                         ResponsePlayer (..),
                                                          Token (..))
 
 type PlayerAPI auths =
   "player" :> (
-       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
-  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] RspPlayer
+       Auth auths PlayerSession :> "register" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] ResponsePlayer
+  :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] ResponsePlayer
   :<|> Auth auths PlayerSession :> "me" :> Get '[JSON] Player
   :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] Token
   :<|> "player-count" :> Get '[JSON] PlayerCount
@@ -90,7 +90,7 @@ register
   => JWTSettings
   -> AuthResult PlayerSession
   -> RegisterPlayer
-  -> m RspPlayer
+  -> m ResponsePlayer
 register jwts arp rp =
   withLabel (Label "/register") $
   asPlayer arp $ \psId -> do
@@ -107,7 +107,7 @@ register jwts arp rp =
             p@Player{..} <- insertPlayer' rp
             Log.debug $ "Inserted new player: " <> T.pack (show p)
             token <- makeToken jwts <=< playerId $ p
-            pure $ RspPlayer (LS.PlayerId _playerId) token
+            pure $ ResponsePlayer (LS.PlayerId _playerId) token
 
 registerFirst
   :: ( HasDbConnPool r
@@ -118,7 +118,7 @@ registerFirst
      )
   => JWTSettings
   -> RegisterPlayer
-  -> m RspPlayer
+  -> m ResponsePlayer
 registerFirst jwts rp =
   withLabel (Label "/register-first") $ do
   Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
@@ -140,7 +140,7 @@ registerFirst jwts rp =
       pId <- playerId p
       Log.debug $ "Inserted new player: " <> T.pack (show p)
       token <- makeToken jwts pId
-      pure $ RspPlayer (LS.PlayerId _playerId) token
+      pure $ ResponsePlayer (LS.PlayerId _playerId) token
 
 me
   :: ( HasDbConnPool r

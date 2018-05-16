@@ -27,7 +27,7 @@ import           Test.Tasty             (TestTree)
 import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
-import           Leaderboard.Types      (RqMatch (..), RspPlayer (..))
+import           Leaderboard.Types      (RqMatch (..), ResponsePlayer (..))
 
 -- | Map emails to players and keep a set of admin emails
 data LeaderboardState (v :: * -> *) =
@@ -49,7 +49,7 @@ type MatchMap v = M.Map (Var Int v) (TestMatch v)
 
 data PlayerWithRsp v =
   PlayerWithRsp
-  { _pwrRsp      :: Var RspPlayer v
+  { _pwrRsp      :: Var ResponsePlayer v
   , _pwrEmail    :: Text
   , _pwrUsername :: Text
   , _pwrPassword :: Text
@@ -64,8 +64,8 @@ instance HTraversable PlayerWithRsp where
 
 data TestMatch v =
   TestMatch
-  { _tmPlayer1      :: Var RspPlayer v
-  , _tmPlayer2      :: Var RspPlayer v
+  { _tmPlayer1      :: Var ResponsePlayer v
+  , _tmPlayer2      :: Var ResponsePlayer v
   , _tmPlayer1Score :: Int
   , _tmPlayer2Score :: Int
   , _tmTime         :: LocalTime
