@@ -58,7 +58,7 @@ type PlayerAPI auths =
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] ResponsePlayer
   :<|> Auth auths PlayerSession :> "me" :> Get '[JSON] Player
   :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] Token
-  :<|> "player-count" :> Get '[JSON] PlayerCount
+  :<|> "count" :> Get '[JSON] PlayerCount
   )
 
 playerAPI :: Proxy (PlayerAPI auths)
@@ -78,7 +78,7 @@ playerServer jwts =
   :<|> registerFirst jwts
   :<|> me
   :<|> authenticate jwts
-  :<|> playerCount
+  :<|> count
 
 register
   :: ( HasDbConnPool r
@@ -186,7 +186,7 @@ authenticate jwts Login{..} =
         then playerId p >>= makeToken jwts
         else throwLoginFail ("Bad password" :: T.Text)
 
-playerCount
+count
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
      , MonadError ServantErr m
@@ -194,7 +194,7 @@ playerCount
      , MonadLog Label m
      )
   => m PlayerCount
-playerCount =
+count =
   withLabel (Label "/player-count") $ PlayerCount <$> getPlayerCount
 
 insertPlayer'
