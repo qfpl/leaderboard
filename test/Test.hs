@@ -2,30 +2,32 @@
 
 module Main where
 
-import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
-                                                throwTo)
-import           Control.Exception             (Exception, bracket, throw)
-import           Control.Lens                  ((&), (.~))
-import qualified Control.Monad.Log             as Log
-import           Database.Postgres.Temp        (DB (..), StartError,
-                                                startAndLogToTmp, stop)
-import           Network.Connection            (TLSSettings (..))
-import           Network.HTTP.Client.TLS       (mkManagerSettings,
-                                                newTlsManagerWith)
-import           Servant.Client                (BaseUrl (BaseUrl),
-                                                ClientEnv (..), Scheme (Https))
-import           System.Directory              (copyFile)
-import           System.FilePath               ((</>))
+import           Control.Concurrent                  (forkIO, newEmptyMVar,
+                                                      takeMVar, throwTo)
+import           Control.Exception                   (Exception, bracket, throw)
+import           Control.Lens                        ((&), (.~))
+import qualified Control.Monad.Log                   as Log
+import           Database.Postgres.Temp              (DB (..), StartError,
+                                                      startAndLogToTmp, stop)
+import           Network.Connection                  (TLSSettings (..))
+import           Network.HTTP.Client.TLS             (mkManagerSettings,
+                                                      newTlsManagerWith)
+import           Servant.Client                      (BaseUrl (BaseUrl),
+                                                      ClientEnv (..),
+                                                      Scheme (Https))
+import           System.Directory                    (copyFile)
+import           System.FilePath                     ((</>))
 
-import           Test.Tasty                    (TestTree, defaultMain,
-                                                testGroup)
+import           Test.Tasty                          (TestTree, defaultMain,
+                                                      testGroup)
 
-import           Leaderboard.Main              (doTheLeaderboard)
-import           Leaderboard.MatchTests        (matchTests)
-import           Leaderboard.RegistrationTests (registrationTests)
-import           Leaderboard.TestServer        (truncateTables)
-import           Leaderboard.Types             (ApplicationOptions (..),
-                                                Command (..), command)
+import           Leaderboard.Main                    (doTheLeaderboard)
+import           Leaderboard.MatchTests              (matchTests)
+import           Leaderboard.RegistrationTests       (registrationTests)
+import           Leaderboard.RegistrationTestsSimple (registrationTestsSimple)
+import           Leaderboard.TestServer              (truncateTables)
+import           Leaderboard.Types                   (ApplicationOptions (..),
+                                                      Command (..), command)
 
 data Shutdown = Shutdown deriving (Show)
 instance Exception Shutdown
@@ -50,7 +52,8 @@ allTheTests
   -> TestTree
 allTheTests tt env =
   testGroup "leaderboard"
-  [ registrationTests tt env
+  [ registrationTestsSimple tt env
+  , registrationTests tt env
   , matchTests tt env
   ]
 
