@@ -17,7 +17,7 @@ import           Data.Time                     (fromGregorian,
 import           Data.Traversable              (sequenceA)
 import           Servant.Client                (ClientEnv)
 
-import           Hedgehog                      (Callback (..),
+import           Hedgehog                      (Callback (..), evalEither,
                                                 Command (Command),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
@@ -109,10 +109,12 @@ cAddMatch env =
       gTokenPlayer <- genPlayerWithRsp ps
       pure $ AddMatch <$> gMatch <*> gTokenPlayer
     exe (AddMatch tm pwr) = do
-      let rm = testToRq tm
+      let
+        rm = testToRq tm
+        doAdd = add (mkMatchClient (clientToken pwr)) rm
       annotateShow rm
       annotateShow $ encode rm
-      successClient show env . add (mkMatchClient (clientToken $ pwr)) $ rm
+      evalEither =<< successClient env doAdd
   in
     Command gen exe [
       -- Need a token, and need a player and their opponent

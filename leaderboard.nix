@@ -26,7 +26,7 @@ mkDerivation {
   executableHaskellDepends = [ base ];
   testHaskellDepends = [
     aeson base beam-core bytestring connection containers directory
-    filepath hedgehog http-client-tls http-types lens mmorph
+    filepath hedgehog http-client-tls http-types lens mmorph monad-log
     postgresql-simple postgresql-simple-url servant servant-auth
     servant-auth-client servant-client tasty tasty-hedgehog text time
     tmp-postgres transformers

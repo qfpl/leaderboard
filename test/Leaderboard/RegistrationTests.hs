@@ -18,10 +18,11 @@ import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
-import           Hedgehog                  (Callback (..), Command (Command), concrete,
+import           Hedgehog                  (Callback (..), Command (Command),
                                             GenT, HTraversable (htraverse),
                                             MonadGen, MonadTest, PropertyT,
                                             Var (Var), annotateShow, assert,
+                                            concrete, evalEither,
                                             executeSequential, failure, forAll,
                                             property, success, test, (===))
 import qualified Hedgehog.Gen              as Gen
@@ -40,7 +41,8 @@ import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
-                                            RegisterPlayer (..), ResponsePlayer (..))
+                                            RegisterPlayer (..),
+                                            ResponsePlayer (..))
 
 registrationTests
   :: IO ()
@@ -91,13 +93,16 @@ instance HTraversable GetPlayerCount where
   htraverse _ _ = pure GetPlayerCount
 
 cGetPlayerCount
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cGetPlayerCount env =
   let
     gen _s = Just . pure $ GetPlayerCount
-    exe _i = successClient show env $ unPlayerCount <$> getPlayerCount
+    exe _i = evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
   in
     Command gen exe [
       Ensure $ \(LeaderboardState ps as _ms) _sNew _i c -> do
@@ -123,7 +128,7 @@ cMe
 cMe env =
   let
     gen (LeaderboardState ps _as _ms) = bool (fmap Me <$> genPlayerWithRsp ps) Nothing $ null ps
-    exe (Me pwr) = successClient show env $ me (clientToken pwr)
+    exe (Me pwr) = evalEither =<< successClient env (me (clientToken pwr))
   in
     Command gen exe
     [ Require $ \(LeaderboardState ps _as _ms) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
@@ -169,9 +174,8 @@ cRegisterFirst env =
       then Just $ RegFirst <$> genRegPlayerRandomAdmin ps
       else Nothing
     execute (RegFirst rp) =
-      let mkError = (("Should succeed with token, but got: " <>) . show)
        -- Force admin flag to true so our local state always aligns with DB
-       in successClient mkError env . registerFirst $ rp {_lbrIsAdmin = Just True}
+       evalEither =<< successClient env (registerFirst $ rp {_lbrIsAdmin = Just True})
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) _input -> null ps
@@ -190,7 +194,7 @@ cRegisterFirstForbidden env =
     gen (LeaderboardState ps _as _ms) =
       bool (Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin ps) Nothing $ null ps
     execute (RegFirstForbidden rp) =
-      failureClient (const "Should return 403") env $ registerFirst rp
+      evalEither =<< failureClient env (registerFirst rp)
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) _input -> not (null ps)
@@ -224,7 +228,7 @@ cRegister env =
       then Nothing
       else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminWithRsp rs
     execute (Register rp p) =
-      successClient show env $ register (clientToken p) rp
+      evalEither =<< successClient env (register (clientToken p) rp)
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) (Register rp _p) ->

@@ -6,16 +6,15 @@ module Leaderboard.RegistrationTestsSimple
   ( registrationTestsSimple
   ) where
 
-import           Control.Monad.IO.Class    (liftIO, MonadIO)
+import           Control.Monad.IO.Class    (MonadIO, liftIO)
 import qualified Data.ByteString           as BS
-import           Data.Semigroup            ((<>))
 import           Database.Beam             (Auto (Auto))
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
                                             HTraversable (htraverse), MonadGen,
-                                            PropertyT, Var, assert,
+                                            MonadTest, assert, evalEither,
                                             executeSequential, failure, forAll,
                                             property, test, (===))
 import qualified Hedgehog.Gen              as Gen
@@ -25,8 +24,7 @@ import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (PlayerWithRsp (..), failureClient,
-                                            successClient)
+import           Leaderboard.SharedState   (failureClient, successClient)
 import           Leaderboard.TestClient    (registerFirst)
 import           Leaderboard.Types         (RegisterPlayer (..),
                                             ResponsePlayer (..), Token (..))
@@ -78,6 +76,7 @@ instance HTraversable RegFirstForbidden where
 cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
+     , MonadTest m
      )
   => ClientEnv
   -> Command n m SimpleState
@@ -88,8 +87,8 @@ cRegisterFirst env =
       then Nothing
       else Just (RegFirst <$> genRegPlayerRandomAdmin)
     execute (RegFirst rp) =
-      let mkError = ("Error registering first user: " <>) . show
-       in successClient mkError env . registerFirst $ rp
+      --let mkError = ("Error registering first user: " <>) . show
+       evalEither =<< successClient env (registerFirst rp)
   in
     Command gen execute [
       Require $ \(SimpleState registeredFirst) _input -> not registeredFirst
@@ -107,6 +106,7 @@ cRegisterFirst env =
 cRegisterFirstForbidden
   :: ( MonadGen n
      , MonadIO m
+     , MonadTest m
      )
   => ClientEnv
   -> Command n m SimpleState
@@ -117,7 +117,7 @@ cRegisterFirstForbidden env =
       then Just (RegFirstForbidden <$> genRegPlayerRandomAdmin)
       else Nothing
     execute (RegFirstForbidden rp) =
-      failureClient (const "Should fail with 403") env $ registerFirst rp
+      evalEither =<< failureClient env (registerFirst rp)
   in
     Command gen execute [
       Require $ \(SimpleState registeredFirst) _input -> registeredFirst

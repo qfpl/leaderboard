@@ -27,7 +27,7 @@ import           Test.Tasty             (TestTree)
 import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
-import           Leaderboard.Types      (RqMatch (..), ResponsePlayer (..))
+import           Leaderboard.Types      (ResponsePlayer (..), RqMatch (..))
 
 -- | Map emails to players and keep a set of admin emails
 data LeaderboardState (v :: * -> *) =
@@ -98,25 +98,23 @@ clientToken
 clientToken PlayerWithRsp{..} =
   fromLbToken . _rspToken . concrete $ _pwrRsp
 
+-- | Swap the left and rights in the `Either` returned by `runClientM` because
+--   we're expecting failure.
 failureClient
   :: MonadIO m
-  => (a -> String)
-  -> ClientEnv
+  => ClientEnv
   -> ClientM a
-  -> m ServantError
-failureClient f ce a = do
-  r <- liftIO $ runClientM a ce
-  either pure (fail . f) r
+  -> m (Either a ServantError)
+failureClient ce ma =
+  either Right Left <$> liftIO (runClientM ma ce)
 
 successClient
   :: MonadIO m
-  => (ServantError -> String)
-  -> ClientEnv
+  => ClientEnv
   -> ClientM a
-  -> m a
-successClient f ce a = do
-  r <- liftIO $ runClientM a ce
-  either (fail . f) pure r
+  -> m (Either ServantError a)
+successClient ce ma =
+  liftIO $ runClientM ma ce
 
 genAdminWithRsp
   :: MonadGen n
