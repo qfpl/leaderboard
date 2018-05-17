@@ -94,14 +94,10 @@ cRegisterFirst env =
     Command gen execute [
       Require $ \(SimpleState registeredFirst) _input -> not registeredFirst
     , Update $ \_oldState _regFirst _output -> SimpleState True
-    , Ensure $ \(SimpleState rOld) _sNew _input _out ->
-        rOld === False
-    , Ensure $ \_sOld (SimpleState rNew) _input _out ->
-        rNew === True
     , Ensure $ \_sOld _sNew _input out ->
         case out of
           (ResponsePlayer (LS.PlayerId (Auto mId)) _token) ->
-            assert $ maybe False (>= 0) mid
+            assert $ maybe False (>= 0) mId
     , Ensure $ \_sOld _sNew _input out ->
         case out of
           (ResponsePlayer _pId (Token t)) ->
