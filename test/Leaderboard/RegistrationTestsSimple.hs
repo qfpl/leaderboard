@@ -6,41 +6,29 @@ module Leaderboard.RegistrationTestsSimple
   ( registrationTestsSimple
   ) where
 
-import           Control.Monad.IO.Class    (MonadIO, liftIO)
-import           Data.Bool                 (bool)
+import           Control.Monad.IO.Class    (liftIO, MonadIO)
 import qualified Data.ByteString           as BS
-import qualified Data.Map                  as M
-import           Data.Maybe                (fromMaybe)
 import           Data.Semigroup            ((<>))
-import qualified Data.Set                  as S
 import           Database.Beam             (Auto (Auto))
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            GenT, HTraversable (htraverse),
-                                            MonadGen, MonadTest, PropertyT,
-                                            Var (Var), annotateShow, assert,
-                                            concrete, executeSequential,
-                                            failure, forAll, property, success,
-                                            test, (===))
+                                            HTraversable (htraverse), MonadGen,
+                                            PropertyT, Var, assert,
+                                            executeSequential, failure, forAll,
+                                            property, test, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (PlayerMap, PlayerWithRsp (..),
-                                            checkCommands, clientToken,
-                                            emptyState, failureClient,
-                                            genAdminWithRsp, genPlayerWithRsp,
+import           Leaderboard.SharedState   (PlayerWithRsp (..), failureClient,
                                             successClient)
-import           Leaderboard.TestClient    (getPlayerCount, me, register,
-                                            registerFirst)
-import           Leaderboard.Types         (PlayerCount (..),
-                                            RegisterPlayer (..),
+import           Leaderboard.TestClient    (registerFirst)
+import           Leaderboard.Types         (RegisterPlayer (..),
                                             ResponsePlayer (..), Token (..))
 
 registrationTestsSimple
@@ -66,20 +54,6 @@ genRegPlayerRandomAdmin =
       <*> genNonEmptyAlphaNum
       <*> Gen.maybe Gen.bool
 
-mkPlayerWithRsp
-  :: RegisterPlayer
-  -> Var ResponsePlayer v
-  -> PlayerWithRsp v
-mkPlayerWithRsp LeaderboardRegistration{..} rsp =
-  let
-    _pwrRsp = rsp
-    _pwrEmail = _lbrEmail
-    _pwrUsername = _lbrUsername
-    _pwrPassword = _lbrPassword
-    _pwrIsAdmin = _lbrIsAdmin
-  in
-    PlayerWithRsp{..}
-
 newtype SimpleState (v :: * -> *) =
   SimpleState Bool
 instance HTraversable SimpleState where
@@ -102,9 +76,11 @@ instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
 cRegisterFirst
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) SimpleState
+  -> Command n m SimpleState
 cRegisterFirst env =
   let
     gen (SimpleState registeredFirst) =
@@ -127,9 +103,11 @@ cRegisterFirst env =
     ]
 
 cRegisterFirstForbidden
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) SimpleState
+  -> Command n m SimpleState
 cRegisterFirstForbidden env =
   let
     gen (SimpleState registeredFirst) =
@@ -159,5 +137,12 @@ propRegisterFirst env reset =
     commands = [cRegisterFirst env, cRegisterFirstForbidden env]
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
-  liftIO reset
-  executeSequential initialState actions
+
+  -- Actions run after all generators have run, but before execution, get run before
+  -- every execution -- i.e. before each shrink is executed. One way to signal this
+  -- and enforce it in the types is to put these actions in `TestT`. `TestT` does not
+  -- allow generators to run (that requires `PropertyT`), and can be transformed to a
+  -- `PropertyT` using `test`.
+  test $ do
+    liftIO reset
+    executeSequential initialState actions
