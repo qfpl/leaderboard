@@ -87,7 +87,6 @@ cRegisterFirst env =
       then Nothing
       else Just (RegFirst <$> genRegPlayerRandomAdmin)
     execute (RegFirst rp) =
-      --let mkError = ("Error registering first user: " <>) . show
        evalEither =<< successClient env (registerFirst rp)
   in
     Command gen execute [
