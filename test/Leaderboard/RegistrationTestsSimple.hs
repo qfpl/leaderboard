@@ -16,7 +16,7 @@ import           Hedgehog                  (Callback (..), Command (Command),
                                             HTraversable (htraverse), MonadGen,
                                             MonadTest, assert, evalEither,
                                             executeSequential, failure, forAll,
-                                            property, test, (===))
+                                            property, test, (===), Symbolic, Concrete)
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -73,6 +73,39 @@ newtype RegFirstForbidden (v :: * -> *) =
 instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
+cRegisterFirstGen
+  :: MonadGen n
+  => SimpleState Symbolic
+  -> Maybe (n (RegFirst Symbolic))
+cRegisterFirstGen (SimpleState registeredFirst) =
+  if registeredFirst
+  then Nothing
+  else Just (RegFirst <$> genRegPlayerRandomAdmin)
+
+cRegisterFirstExe
+  :: ( MonadIO m
+     , MonadTest m
+     )
+  => ClientEnv
+  -> RegFirst Concrete
+  -> m ResponsePlayer
+cRegisterFirstExe env (RegFirst rp) =
+  evalEither =<< successClient env (registerFirst rp)
+
+cRegisterFirstCallbacks
+  :: [Callback RegFirst ResponsePlayer SimpleState]
+cRegisterFirstCallbacks =
+  [ Require $ \(SimpleState registeredFirst) _i ->
+      not registeredFirst
+  , Update $ \_sOld _i _o -> SimpleState True
+  , Ensure $ \_sOld _sNew _i rsp ->
+      case rsp of
+        (ResponsePlayer (LS.PlayerId (Auto mId))
+                        (Token token)) -> do
+          assert $ not (BS.null token)
+          assert $ maybe False (>= 0) mId
+  ]
+
 cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
@@ -81,26 +114,9 @@ cRegisterFirst
   => ClientEnv
   -> Command n m SimpleState
 cRegisterFirst env =
-  let
-    gen (SimpleState registeredFirst) =
-      if registeredFirst
-      then Nothing
-      else Just (RegFirst <$> genRegPlayerRandomAdmin)
-    execute (RegFirst rp) =
-       evalEither =<< successClient env (registerFirst rp)
-  in
-    Command gen execute [
-      Require $ \(SimpleState registeredFirst) _input -> not registeredFirst
-    , Update $ \_oldState _regFirst _output -> SimpleState True
-    , Ensure $ \_sOld _sNew _input out ->
-        case out of
-          (ResponsePlayer (LS.PlayerId (Auto mId)) _token) ->
-            assert $ maybe False (>= 0) mId
-    , Ensure $ \_sOld _sNew _input out ->
-        case out of
-          (ResponsePlayer _pId (Token t)) ->
-            assert $ not (BS.null t)
-    ]
+  Command cRegisterFirstGen
+          (cRegisterFirstExe env)
+          cRegisterFirstCallbacks
 
 cRegisterFirstForbidden
   :: ( MonadGen n
