@@ -197,10 +197,16 @@ cRegisterFirst env =
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as) _input -> null ps
-    , Update $ \(LeaderboardState _ps _as) (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
-        let lbr' = lbr {_lbrIsAdmin = Just True}
-         in LeaderboardState (M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)) (S.singleton _lbrEmail)
-    , Ensure $ \_sOld (LeaderboardState psNew _as) (RegFirst _rp) _t -> length psNew === 1
+    , Update $
+        \(LeaderboardState _ps _as)
+         (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
+           let
+             lbr' = lbr {_lbrIsAdmin = Just True}
+             player = mkPlayerWithRsp lbr' rsp
+             players = M.singleton _lbrEmail player
+             admins = S.singleton _lbrEmail
+           in
+             LeaderboardState players admins
     ]
 
 cRegisterFirstForbidden
@@ -230,9 +236,11 @@ cRegisterFirstForbidden env =
 data Register (v :: * -> *) =
   Register RegisterPlayer (PlayerWithRsp v)
   deriving (Eq, Show)
+
 instance HTraversable Register where
   htraverse f (Register rp PlayerWithRsp{..}) =
-    let mkFP (Var rsp) = fmap (\_pwrRsp -> PlayerWithRsp{..}) $ Var <$> f rsp
+    let mkFP (Var rsp) =
+          fmap (\_pwrRsp -> PlayerWithRsp{..}) $ Var <$> f rsp
      in Register rp <$> mkFP _pwrRsp
 
 cRegister
