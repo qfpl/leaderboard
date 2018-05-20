@@ -118,6 +118,23 @@ cRegisterFirst env =
           (cRegisterFirstExe env)
           cRegisterFirstCallbacks
 
+cRegisterFirstForbiddenGen (SimpleState registeredFirst) =
+  if registeredFirst
+  then Just (RegFirstForbidden <$> genRegPlayerRandomAdmin)
+  else Nothing
+
+cRegisterFirstForbiddenExe (RegFirstForbidden rp) =
+  evalEither =<< failureClient env (registerFirst rp)
+
+cRegisterFirstForbiddenCallbacks = [
+    Require $ \(SimpleState registeredFirst) _input ->
+      registeredFirst
+  , Ensure $ \_sOld _sNew _input se ->
+      case se of
+        FailureResponse{..} -> responseStatus === forbidden403
+        _                   -> failure
+  ]
+
 cRegisterFirstForbidden
   :: ( MonadGen n
      , MonadIO m
@@ -126,22 +143,9 @@ cRegisterFirstForbidden
   => ClientEnv
   -> Command n m SimpleState
 cRegisterFirstForbidden env =
-  let
-    gen (SimpleState registeredFirst) =
-      if registeredFirst
-      then Just (RegFirstForbidden <$> genRegPlayerRandomAdmin)
-      else Nothing
-    execute (RegFirstForbidden rp) =
-      evalEither =<< failureClient env (registerFirst rp)
-  in
-    Command gen execute [
-      Require $ \(SimpleState registeredFirst) _input -> registeredFirst
-      -- State shouldn't change, so no `Update`
-    , Ensure $ \_sOld _sNew _input se ->
-        case se of
-          FailureResponse{..} -> responseStatus === forbidden403
-          _                   -> failure
-    ]
+  Command cRegisterFirstForbiddenGen
+          (cRegisterFirstForbiddenExe env)
+          cRegisterFirstForbiddenCmds
 
 propRegisterFirst
   :: ClientEnv
