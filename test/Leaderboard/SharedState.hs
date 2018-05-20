@@ -59,8 +59,9 @@ data PlayerWithRsp v =
 
 instance HTraversable PlayerWithRsp where
   htraverse f PlayerWithRsp{..} =
-    case _pwrRsp of
-      (Var vr) -> (\_pwrRsp -> PlayerWithRsp{..}) <$> (Var <$> f vr)
+    let mkP _pwrRsp = PlayerWithRsp{..}
+    in case _pwrRsp of
+        (Var vr) -> mkP <$> (Var <$> f vr)
 
 data TestMatch v =
   TestMatch

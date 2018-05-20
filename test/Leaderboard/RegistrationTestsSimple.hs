@@ -13,10 +13,11 @@ import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            HTraversable (htraverse), MonadGen,
-                                            MonadTest, assert, evalEither,
+                                            Concrete, HTraversable (htraverse),
+                                            MonadGen, MonadTest, Symbolic,
+                                            assert, evalEither,
                                             executeSequential, failure, forAll,
-                                            property, test, (===), Symbolic, Concrete)
+                                            property, test, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -118,21 +119,35 @@ cRegisterFirst env =
           (cRegisterFirstExe env)
           cRegisterFirstCallbacks
 
+cRegisterFirstForbiddenGen
+  :: MonadGen n
+  => SimpleState Symbolic
+  -> Maybe (n (RegFirstForbidden Symbolic))
 cRegisterFirstForbiddenGen (SimpleState registeredFirst) =
   if registeredFirst
   then Just (RegFirstForbidden <$> genRegPlayerRandomAdmin)
   else Nothing
 
-cRegisterFirstForbiddenExe (RegFirstForbidden rp) =
+cRegisterFirstForbiddenExe
+  :: ( MonadIO m
+     , MonadTest m
+     )
+  => ClientEnv
+  -> RegFirstForbidden Concrete
+  -> m ServantError
+cRegisterFirstForbiddenExe env (RegFirstForbidden rp) =
   evalEither =<< failureClient env (registerFirst rp)
 
+cRegisterFirstForbiddenCallbacks
+  :: [Callback RegFirstForbidden ServantError SimpleState]
 cRegisterFirstForbiddenCallbacks = [
     Require $ \(SimpleState registeredFirst) _input ->
       registeredFirst
   , Ensure $ \_sOld _sNew _input se ->
       case se of
-        FailureResponse{..} -> responseStatus === forbidden403
-        _                   -> failure
+        FailureResponse{..} ->
+          responseStatus === forbidden403
+        _ -> failure
   ]
 
 cRegisterFirstForbidden
@@ -145,7 +160,7 @@ cRegisterFirstForbidden
 cRegisterFirstForbidden env =
   Command cRegisterFirstForbiddenGen
           (cRegisterFirstForbiddenExe env)
-          cRegisterFirstForbiddenCmds
+          cRegisterFirstForbiddenCallbacks
 
 propRegisterFirst
   :: ClientEnv
