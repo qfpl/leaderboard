@@ -157,10 +157,7 @@ cMeExecute
   -> Me Concrete
   -> m Player
 cMeExecute env (Me pwr) =
-  let
-    t = clientToken pwr
-  in
-    evalEither =<< successClient env (me t)
+  evalEither =<< successClient env (me (clientToken pwr))
 
 cMeCallbacks
   :: [Callback Me Player LeaderboardState]
@@ -168,14 +165,10 @@ cMeCallbacks = [
     Require $ \(LeaderboardState ps _) (Me p) ->
       M.member (_pwrEmail p) ps
   , Ensure $
-    \(LeaderboardState ps _) _ _ p@Player{..} -> do
-      pwr@PlayerWithRsp{..} <- eval (ps M.! _playerEmail)
+    \(LeaderboardState ps _) _ _ Player{..} -> do
+      PlayerWithRsp{..} <- eval (ps M.! _playerEmail)
       let
-        -- If there's only one user it should be an admin regardless of what we input
-        pwrAdmin = fromMaybe False _pwrIsAdmin
-      annotateShow $ length ps
-      annotateShow pwr
-      annotateShow p
+        pwrAdmin = fromMaybe True _pwrIsAdmin
       _rspId (concrete _pwrRsp) === LS.PlayerId _playerId
       _pwrUsername === _playerUsername
       _pwrEmail === _playerEmail

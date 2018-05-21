@@ -179,6 +179,5 @@ propRegisterFirst env reset =
   -- and enforce it in the types is to put these actions in `TestT`. `TestT` does not
   -- allow generators to run (that requires `PropertyT`), and can be transformed to a
   -- `PropertyT` using `test`.
-  test $ do
-    liftIO reset
-    executeSequential initialState actions
+  liftIO reset
+  executeSequential initialState actions
