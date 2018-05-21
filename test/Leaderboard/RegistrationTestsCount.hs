@@ -1,10 +1,11 @@
 -- This is a simplified version of what `RegistrationTests` does.
 -- Used for examples in a talk.
 
-{-# LANGUAGE KindSignatures     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Leaderboard.RegistrationTestsCount
   ( registrationTestsCount
@@ -21,9 +22,10 @@ import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            Eq1, GenT, HTraversable (htraverse),
-                                            MonadGen, MonadTest, PropertyT,
-                                            Show1, Var (Var), annotateShow,
+                                            Concrete, Eq1, GenT,
+                                            HTraversable (htraverse), MonadGen,
+                                            MonadTest, PropertyT, Show1,
+                                            Symbolic, Var (Var), annotateShow,
                                             assert, concrete, evalEither,
                                             executeSequential, failure, forAll,
                                             property, success, test, (===))
@@ -38,8 +40,7 @@ import qualified Leaderboard.Schema        as LS
 import           Leaderboard.SharedState   (PlayerMap, PlayerWithRsp (..),
                                             checkCommands, clientToken,
                                             emptyState, failureClient,
-                                            genPlayerWithRsp,
-                                            successClient)
+                                            genPlayerWithRsp, successClient)
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
@@ -60,7 +61,7 @@ registrationTestsCount
   -> TestTree
 registrationTestsCount truncateTables env =
     testGroup "registration-count" [
-      propRegister env truncateTables
+      propRegisterCount env truncateTables
     ]
 
 genRegPlayerRandomAdmin
@@ -130,41 +131,6 @@ cGetPlayerCount env =
         assert $ length ps >= length as
     ]
 
-newtype Me (v :: * -> *) =
-  Me (PlayerWithRsp v)
-  deriving (Eq, Show)
-instance HTraversable Me where
-  htraverse f (Me pwr) = Me <$> htraverse f pwr
-
-cMe
-  :: ( MonadGen n
-     , MonadTest m
-     , MonadIO m
-     )
-  => ClientEnv
-  -> Command n m LeaderboardState
-cMe env =
-  let
-    gen (LeaderboardState ps _as) = bool (fmap Me <$> genPlayerWithRsp ps) Nothing $ null ps
-    exe (Me pwr) = evalEither =<< successClient env (me (clientToken pwr))
-  in
-    Command gen exe
-    [ Require $ \(LeaderboardState ps _as) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
-    , Require $ \(LeaderboardState _ps as) _in -> not (null as)
-    , Ensure $ \(LeaderboardState ps _as) _sNew _i p@Player{..} -> do
-        let
-          pwr@PlayerWithRsp{..} = ps M.! _playerEmail
-          -- If there's only one user it should be an admin regardless of what we input
-          pwrAdmin = fromMaybe False _pwrIsAdmin
-        annotateShow $ length ps
-        annotateShow pwr
-        annotateShow p
-        (_rspId . concrete $ _pwrRsp) === LS.PlayerId _playerId
-        _pwrUsername === _playerUsername
-        _pwrEmail === _playerEmail
-        pwrAdmin === _playerIsAdmin
-    ]
-
 --------------------------------------------------------------------------------
 -- REGISTER FIRST
 --------------------------------------------------------------------------------
@@ -182,9 +148,12 @@ instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
 cRegisterFirst
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cRegisterFirst env =
   let
     gen (LeaderboardState ps _as) =
@@ -198,8 +167,7 @@ cRegisterFirst env =
     Command gen execute [
       Require $ \(LeaderboardState ps _as) _input -> null ps
     , Update $
-        \(LeaderboardState _ps _as)
-         (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
+        \_ (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
            let
              lbr' = lbr {_lbrIsAdmin = Just True}
              player = mkPlayerWithRsp lbr' rsp
@@ -210,9 +178,12 @@ cRegisterFirst env =
     ]
 
 cRegisterFirstForbidden
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cRegisterFirstForbidden env =
   let
     gen (LeaderboardState ps _as) =
@@ -243,56 +214,95 @@ instance HTraversable Register where
           fmap (\_pwrRsp -> PlayerWithRsp{..}) $ Var <$> f rsp
      in Register rp <$> mkFP _pwrRsp
 
-cRegister
-  :: MonadGen n
-  => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
-cRegister env =
-  let
-    gen rs@(LeaderboardState ps as) =
-      if null as
-      then Nothing
-      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminWithRsp rs
-    execute (Register rp p) =
-      evalEither =<< successClient env (register (clientToken p) rp)
-  in
-    Command gen execute [
-      Require $ \(LeaderboardState ps _as) (Register rp _p) ->
-        M.notMember (_lbrEmail rp) ps
-    , Require $ \(LeaderboardState _ps as) (Register _rp p) ->
-        S.member (_pwrEmail p) as
-    , Update $ \(LeaderboardState ps as) (Register rp@LeaderboardRegistration{..} _rqToken) rsp ->
-        let
-          newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
-          newAdmins =
-            case _lbrIsAdmin of
-              Just True -> S.insert _lbrEmail as
-              _         -> as
-        in
-          LeaderboardState newPlayers newAdmins
-    , Ensure $ \(LeaderboardState psOld asOld)
-                (LeaderboardState psNew asNew)
-                (Register LeaderboardRegistration{..} _t)
-                _output -> do
-        assert $ M.member _lbrEmail psNew
-        assert $ M.notMember _lbrEmail psOld
-        length psNew === length psOld + 1
-        case _lbrIsAdmin of
-          Just True -> do
-            assert $ S.member _lbrEmail asNew
-            assert $ S.notMember _lbrEmail asOld
-            length asNew === length asOld + 1
-          _ -> success
-    ]
+cRegisterGen
+  :: forall n.
+     MonadGen n
+  => LeaderboardState Symbolic
+  -> Maybe (n (Register Symbolic))
+cRegisterGen (LeaderboardState ps as) =
+  if null as
+  then Nothing
+  else
+    let
+      maybeGenAdmin :: Maybe (n (PlayerWithRsp Symbolic))
+      maybeGenAdmin =
+        pure $ (M.!) ps <$> (Gen.element . S.toList $ as)
+    in
+      (Register <$> genRegPlayerRandomAdmin ps <*>)
+        <$> maybeGenAdmin
 
-propRegister
+cRegisterExecute
+  :: ( MonadIO m
+     , MonadTest m
+     )
+  => ClientEnv
+  -> Register Concrete
+  -> m ResponsePlayer
+cRegisterExecute env (Register rp p) =
+  evalEither =<< successClient env (register (clientToken p) rp)
+
+cRegisterCallbacks = [
+    Require $ \(LeaderboardState ps _) (Register rp _) ->
+      M.notMember (_lbrEmail rp) ps
+  , Require $ \(LeaderboardState _ as) (Register _ p) ->
+      S.member (_pwrEmail p) as
+  , Update $
+      \(LeaderboardState ps as)
+       (Register rp@LeaderboardRegistration{..} _)
+       rsp ->
+         let
+           newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
+           newAdmins =
+             case _lbrIsAdmin of
+               Just True -> S.insert _lbrEmail as
+               _         -> as
+         in
+           LeaderboardState newPlayers newAdmins
+  -- , Ensure $ \(LeaderboardState psOld asOld)
+  --             (LeaderboardState psNew asNew)
+  --             (Register LeaderboardRegistration{..} _t)
+  --             _output -> do
+  --     assert $ M.member _lbrEmail psNew
+  --     assert $ M.notMember _lbrEmail psOld
+  --     length psNew === length psOld + 1
+  --     case _lbrIsAdmin of
+  --       Just True -> do
+  --         assert $ S.member _lbrEmail asNew
+  --         assert $ S.notMember _lbrEmail asOld
+  --         length asNew === length asOld + 1
+  --       _ -> success
+  ]
+
+cRegister
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
+  => ClientEnv
+  -> Command n m LeaderboardState
+cRegister env =
+    Command cRegisterGen
+            (cRegisterExecute env)
+            cRegisterCallbacks
+
+propRegisterCount
   :: ClientEnv
   -> IO ()
   -> TestTree
-propRegister env reset =
+propRegisterCount env reset =
+  testProperty "register-counts" . property $ do
   let
     initialState = LeaderboardState M.empty S.empty
-  in
-    checkCommands "register-count" reset initialState $
-      ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount]
+    commands = [
+        cRegisterFirst env
+      , cRegisterFirstForbidden env
+      , cRegister env
+      , cGetPlayerCount env
+      ]
+  actions <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState commands
+
+  test $ do
+    liftIO reset
+    executeSequential initialState actions
 
