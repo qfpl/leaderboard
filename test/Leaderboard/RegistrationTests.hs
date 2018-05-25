@@ -29,7 +29,9 @@ import           Test.Tasty                (TestTree, testGroup)
 
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (LeaderboardState (..), PlayerMap,
+import           Leaderboard.SharedState   (HasAdminCount (adminCount),
+                                            HasPlayerCount (playerCount),
+                                            LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), checkCommands,
                                             clientToken, emptyState,
                                             failureClient, genAdminWithRsp,
@@ -92,20 +94,20 @@ cGetPlayerCount
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
+     , HasPlayerCount state
+     , HasAdminCount state
      )
   => ClientEnv
-  -> Command n m LeaderboardState
+  -> Command n m state
 cGetPlayerCount env =
   let
     gen _s = Just . pure $ GetPlayerCount
     exe _i = evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
   in
     Command gen exe [
-      Ensure $ \(LeaderboardState ps as _ms) _sNew _i c -> do
-        annotateShow ps
-        annotateShow as
-        length ps === fromIntegral c
-        assert $ length ps >= length as
+      Ensure $ \s _sNew _i c -> do
+        playerCount s === fromIntegral c
+        assert $ adminCount s <= fromIntegral c
     ]
 
 newtype Me (v :: * -> *) =

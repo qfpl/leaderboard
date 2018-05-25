@@ -39,6 +39,18 @@ data LeaderboardState (v :: * -> *) =
 deriving instance Show1 v => Show (LeaderboardState v)
 deriving instance Eq1 v => Eq (LeaderboardState v)
 
+class HasPlayerCount s where
+  playerCount :: forall (v :: * -> *). s v -> Int
+
+instance HasPlayerCount LeaderboardState where
+  playerCount = length . _players
+
+class HasAdminCount s where
+  adminCount :: forall (v :: * -> *). s v -> Int
+
+instance HasAdminCount LeaderboardState where
+  adminCount = length . _admins
+
 emptyState
   :: LeaderboardState (v :: * -> *)
 emptyState =
