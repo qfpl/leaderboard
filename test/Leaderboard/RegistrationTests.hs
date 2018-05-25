@@ -9,27 +9,23 @@ module Leaderboard.RegistrationTests
   , cGetPlayerCount
   ) where
 
-import           Control.Monad.IO.Class    (MonadIO, liftIO)
+import           Control.Monad.IO.Class    (MonadIO)
 import           Data.Bool                 (bool)
 import qualified Data.Map                  as M
 import           Data.Maybe                (fromMaybe)
-import           Data.Semigroup            ((<>))
 import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
 import           Hedgehog                  (Callback (..), Command (Command),
-                                            GenT, HTraversable (htraverse),
-                                            MonadGen, MonadTest, PropertyT,
-                                            Var (Var), annotateShow, assert,
-                                            concrete, evalEither,
-                                            executeSequential, failure, forAll,
-                                            property, success, test, (===))
+                                            HTraversable (htraverse), MonadGen,
+                                            MonadTest, Var (Var), annotateShow,
+                                            assert, concrete, evalEither,
+                                            failure, success, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
 import           Test.Tasty                (TestTree, testGroup)
-import           Test.Tasty.Hedgehog       (testProperty)
 
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
@@ -164,9 +160,12 @@ instance HTraversable RegFirstForbidden where
   htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
 
 cRegisterFirst
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cRegisterFirst env =
   let
     gen (LeaderboardState ps _as _ms) =
@@ -186,9 +185,12 @@ cRegisterFirst env =
     ]
 
 cRegisterFirstForbidden
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cRegisterFirstForbidden env =
   let
     gen (LeaderboardState ps _as _ms) =
@@ -218,9 +220,12 @@ instance HTraversable Register where
      in Register rp <$> mkFP _pwrRsp
 
 cRegister
-  :: MonadGen n
+  :: ( MonadGen n
+     , MonadIO m
+     , MonadTest m
+     )
   => ClientEnv
-  -> Command n (PropertyT IO) LeaderboardState
+  -> Command n m LeaderboardState
 cRegister env =
   let
     gen rs@(LeaderboardState ps as _ms) =

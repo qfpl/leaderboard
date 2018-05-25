@@ -24,9 +24,6 @@ import           Test.Tasty                          (TestTree, defaultMain,
 import           Leaderboard.Main                    (doTheLeaderboard)
 import           Leaderboard.MatchTests              (matchTests)
 import           Leaderboard.RegistrationTests       (registrationTests)
-import           Leaderboard.RegistrationTestsCount  (registrationTestsCount)
-import           Leaderboard.RegistrationTestsMe     (registrationTestsMe)
-import           Leaderboard.RegistrationTestsSimple (registrationTestsSimple)
 import           Leaderboard.TestServer              (truncateTables)
 import           Leaderboard.Types                   (ApplicationOptions (..),
                                                       Command (..), command)
@@ -54,10 +51,7 @@ allTheTests
   -> TestTree
 allTheTests tt env =
   testGroup "leaderboard"
-  [ registrationTestsSimple tt env
-  , registrationTestsCount tt env
-  , registrationTestsMe tt env
-  , registrationTests tt env
+  [ registrationTests tt env
   , matchTests tt env
   ]
 
