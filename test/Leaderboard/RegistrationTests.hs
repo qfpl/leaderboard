@@ -1,5 +1,8 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 module Leaderboard.RegistrationTests
@@ -9,11 +12,13 @@ module Leaderboard.RegistrationTests
   , cGetPlayerCount
   ) where
 
+import Control.Lens ((&), (^.), anyOf, set)
 import           Control.Monad.IO.Class    (MonadIO)
 import           Data.Bool                 (bool)
 import qualified Data.Map                  as M
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as S
+import Data.Text (Text)
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
@@ -29,8 +34,8 @@ import           Test.Tasty                (TestTree, testGroup)
 
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (HasAdminCount (adminCount),
-                                            HasPlayerCount (playerCount),
+import           Leaderboard.SharedState   (HasAdmins (admins),
+                                            HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), checkCommands,
                                             clientToken, emptyState,
@@ -91,11 +96,12 @@ instance HTraversable GetPlayerCount where
   htraverse _ _ = pure GetPlayerCount
 
 cGetPlayerCount
-  :: ( MonadGen n
+  :: forall m n state v.
+     ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayerCount state
-     , HasAdminCount state
+     , HasPlayers (state v) (PlayerMap v)
+     , HasAdmins (state v) (S.Set Text)
      )
   => ClientEnv
   -> Command n m state
@@ -106,8 +112,8 @@ cGetPlayerCount env =
   in
     Command gen exe [
       Ensure $ \s _sNew _i c -> do
-        playerCount s === fromIntegral c
-        assert $ adminCount s <= fromIntegral c
+        length (s ^. players) === fromIntegral c
+        assert $ length (s ^. admins) <= fromIntegral c
     ]
 
 newtype Me (v :: * -> *) =
@@ -122,14 +128,14 @@ cMe
      , MonadIO m
      )
   => ClientEnv
-  -> Command n m LeaderboardState
+  -> Command n m state
 cMe env =
   let
-    gen (LeaderboardState ps _as _ms) = bool (fmap Me <$> genPlayerWithRsp ps) Nothing $ null ps
+    gen state = (fmap . fmap) Me $ genPlayerWithRsp (players ^. state)
     exe (Me pwr) = evalEither =<< successClient env (me (clientToken pwr))
   in
     Command gen exe
-    [ Require $ \(LeaderboardState ps _as _ms) (Me PlayerWithRsp{..}) -> M.member _pwrEmail ps
+    [ Require $ \state (Me PlayerWithRsp{..}) -> anyOf (state ^.. players . each . email) (== _pwrEmail)
     , Require $ \(LeaderboardState _ps as _ms) _in -> not (null as)
     , Ensure $ \(LeaderboardState ps _as _ms) _sNew _i p@Player{..} -> do
         let
@@ -165,25 +171,31 @@ cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
+     , HasPlayers (state v) (PlayerMap v)
+     , HasAdmins (state v) (S.Set Text)
      )
   => ClientEnv
-  -> Command n m LeaderboardState
+  -> Command n m state
 cRegisterFirst env =
   let
-    gen (LeaderboardState ps _as _ms) =
-      if null ps
-      then Just $ RegFirst <$> genRegPlayerRandomAdmin ps
+    gen state =
+      if state ^. players & null
+      then Just . fmap RegFirst . genRegPlayerRandomAdmin $ state ^. players
       else Nothing
     execute (RegFirst rp) =
        -- Force admin flag to true so our local state always aligns with DB
        evalEither =<< successClient env (registerFirst $ rp {_lbrIsAdmin = Just True})
   in
     Command gen execute [
-      Require $ \(LeaderboardState ps _as _ms) _input -> null ps
-    , Update $ \(LeaderboardState _ps _as ms) (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
-        let lbr' = lbr {_lbrIsAdmin = Just True}
-         in LeaderboardState (M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)) (S.singleton _lbrEmail) ms
-    , Ensure $ \_sOld (LeaderboardState psNew _as _ms) (RegFirst _rp) _t -> length psNew === 1
+      Require $ \state _input -> state ^. players & null
+    , Update $ \state (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
+        let
+          lbr' = lbr {_lbrIsAdmin = Just True}
+          ps = M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)
+          as = S.singleton _lbrEmail
+         in
+          set players ps . set admins as $ state
+    , Ensure $ \_sOld sNew (RegFirst _rp) _t -> (sNew ^. players & length) === 1
     ]
 
 cRegisterFirstForbidden
@@ -281,4 +293,19 @@ propRegister
 propRegister env reset =
   checkCommands "register-all" reset emptyState $
     ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+
+-- propParallel
+--   :: ClientEnv
+--   -> IO ()
+--   -> TestTree
+-- propParallel env reset =
+--   testProperty "register-parallel" . property $ do
+--   let
+--     prefix = [cRegisterFirst env]
+--     commands =
+--       ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+--   actions <- forAll $
+--     Gen.parallel (Range.linear 1 100) initialState commands
+--   liftIO reset
+--   executeParallel initialState actions
 
