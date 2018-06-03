@@ -1,9 +1,10 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE KindSignatures    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE RecordWildCards           #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 
 module Leaderboard.RegistrationTests
   ( registrationTests
@@ -12,13 +13,12 @@ module Leaderboard.RegistrationTests
   , cGetPlayerCount
   ) where
 
-import Control.Lens ((&), (^.), anyOf, set)
+import           Control.Lens              (anyOf, at, each, set, (&), (^.))
 import           Control.Monad.IO.Class    (MonadIO)
 import           Data.Bool                 (bool)
 import qualified Data.Map                  as M
 import           Data.Maybe                (fromMaybe)
 import qualified Data.Set                  as S
-import Data.Text (Text)
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
@@ -38,7 +38,7 @@ import           Leaderboard.SharedState   (HasAdmins (admins),
                                             HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), checkCommands,
-                                            clientToken, emptyState,
+                                            clientToken, email, emptyState,
                                             failureClient, genAdminWithRsp,
                                             genPlayerWithRsp, successClient)
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
@@ -96,12 +96,12 @@ instance HTraversable GetPlayerCount where
   htraverse _ _ = pure GetPlayerCount
 
 cGetPlayerCount
-  :: forall m n state v.
+  :: forall m n state.
      ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayers (state v) (PlayerMap v)
-     , HasAdmins (state v) (S.Set Text)
+     , HasPlayers state
+     , HasAdmins state
      )
   => ClientEnv
   -> Command n m state
@@ -126,29 +126,32 @@ cMe
   :: ( MonadGen n
      , MonadTest m
      , MonadIO m
+     , HasPlayers state
+     , HasAdmins state
      )
   => ClientEnv
   -> Command n m state
 cMe env =
   let
-    gen state = (fmap . fmap) Me $ genPlayerWithRsp (players ^. state)
+    gen state = (fmap . fmap) Me $ genPlayerWithRsp (state ^. players)
     exe (Me pwr) = evalEither =<< successClient env (me (clientToken pwr))
   in
     Command gen exe
-    [ Require $ \state (Me PlayerWithRsp{..}) -> anyOf (state ^.. players . each . email) (== _pwrEmail)
-    , Require $ \(LeaderboardState _ps as _ms) _in -> not (null as)
-    , Ensure $ \(LeaderboardState ps _as _ms) _sNew _i p@Player{..} -> do
-        let
-          pwr@PlayerWithRsp{..} = ps M.! _playerEmail
+    [ Require $ \s (Me PlayerWithRsp{..}) -> anyOf (players . each . email) (== _pwrEmail) s
+    , Require $ \s _in -> not (null (s ^. admins))
+    , Ensure $ \sOld _sNew _i p@Player{..} ->
+        case sOld ^. players . at _playerEmail of
+          Just (pwr@PlayerWithRsp{..}) -> do
           -- If there's only one user it should be an admin regardless of what we input
-          pwrAdmin = fromMaybe False _pwrIsAdmin
-        annotateShow $ length ps
-        annotateShow pwr
-        annotateShow p
-        (_rspId . concrete $ _pwrRsp) === LS.PlayerId _playerId
-        _pwrUsername === _playerUsername
-        _pwrEmail === _playerEmail
-        pwrAdmin === _playerIsAdmin
+            let pwrAdmin = fromMaybe False _pwrIsAdmin
+            annotateShow . length $ sOld ^. players
+            annotateShow pwr
+            annotateShow p
+            (_rspId . concrete $ _pwrRsp) === LS.PlayerId _playerId
+            _pwrUsername === _playerUsername
+            _pwrEmail === _playerEmail
+            pwrAdmin === _playerIsAdmin
+          Nothing -> failure
     ]
 
 --------------------------------------------------------------------------------
@@ -171,8 +174,8 @@ cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayers (state v) (PlayerMap v)
-     , HasAdmins (state v) (S.Set Text)
+     , HasPlayers state
+     , HasAdmins state
      )
   => ClientEnv
   -> Command n m state

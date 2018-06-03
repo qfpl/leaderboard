@@ -10,8 +10,8 @@
 
 module Leaderboard.SharedState where
 
-import           Control.Lens           (abbreviatedFields, makeFieldsNoPrefix,
-                                         makeLensesWith)
+import           Control.Lens           (abbreviatedFields,
+                                         makeLensesWith, Lens', lens)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
@@ -44,6 +44,18 @@ data LeaderboardState (v :: * -> *) =
   }
 deriving instance Show1 v => Show (LeaderboardState v)
 deriving instance Eq1 v => Eq (LeaderboardState v)
+
+-- If we used lens's template haskell to define these classes, they would be polymorphic on both the
+-- @s@ and @a@ type parameters. This would result in an ambiguous type for @v@.
+class HasPlayers s where
+  players :: Lens' (s v) (PlayerMap v)
+instance HasPlayers LeaderboardState where
+  players = lens _players (\s ps -> s {_players = ps})
+
+class HasAdmins (s :: (* -> *) -> *) where
+  admins :: Lens' (s v) (S.Set Text)
+instance HasAdmins LeaderboardState where
+  admins = lens _admins (\s ps -> s {_admins = ps})
 
 emptyState
   :: LeaderboardState (v :: * -> *)
@@ -176,5 +188,4 @@ checkCommands name reset initialState commands  =
   liftIO reset
   executeSequential initialState actions
 
-makeFieldsNoPrefix ''LeaderboardState
 makeLensesWith abbreviatedFields ''PlayerWithRsp
