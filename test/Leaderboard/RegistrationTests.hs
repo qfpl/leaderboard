@@ -297,3 +297,18 @@ propRegister env reset =
   checkCommands "register-all" reset emptyState $
     ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
 
+-- propParallel
+--   :: ClientEnv
+--   -> IO ()
+--   -> TestTree
+-- propParallel env reset =
+--   testProperty "register-parallel" . property $ do
+--   let
+--     prefix = [cRegisterFirst env]
+--     commands =
+--       ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+--   actions <- forAll $
+--     Gen.parallel (Range.linear 1 100) initialState commands
+--   liftIO reset
+--   executeParallel initialState actions
+
