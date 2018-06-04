@@ -134,7 +134,7 @@ registerFirst jwts rp =
       Log.info "registerFirst called but player(s) already registered"
       throwError $ err403 { errBody = "First user already added." }
     Left e -> do
-      Log.error $ "While inserting player (email = '" <> _lbrEmail rp <> "'): " <> T.pack (show e)
+      Log.error . T.pack . show $ e
       throwError err500
     Right p@Player{..} -> do
       pId <- playerId p

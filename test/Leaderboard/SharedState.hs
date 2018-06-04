@@ -10,8 +10,8 @@
 
 module Leaderboard.SharedState where
 
-import           Control.Lens           (abbreviatedFields,
-                                         makeLensesWith, Lens', lens)
+import           Control.Lens           (Lens', abbreviatedFields, lens,
+                                         makeLensesWith)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
@@ -23,10 +23,11 @@ import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
 
-import           Hedgehog               (Command, Concrete, Eq1, Gen,
+import           Hedgehog               (Command, Concrete, Eq1, Gen, TestT,
                                          HTraversable (htraverse), MonadGen,
                                          PropertyT, Show1, Var (Var), concrete,
-                                         executeSequential, forAll, property)
+                                         executeParallel, executeSequential,
+                                         forAll, property, test, withRetries, evalIO)
 import qualified Hedgehog.Gen           as Gen
 import qualified Hedgehog.Range         as Range
 import           Test.Tasty             (TestTree)
@@ -185,7 +186,25 @@ checkCommands name reset initialState commands  =
   testProperty name . property $ do
   actions <- forAll $
     Gen.sequential (Range.linear 1 100) initialState commands
-  liftIO reset
+  evalIO reset
   executeSequential initialState actions
+
+-- | Produces a 'TestTree' for checking 'Command's in parallel.
+--
+-- 'Gen' can't be any instance of 'MonadGen' here because 'forAll' takes a @Gen a@.
+checkCommandsParallel
+  :: forall state.
+     String
+  -> IO ()
+  -> (forall v. state v)
+  -> [Command Gen (TestT IO) state]
+  -> TestTree
+checkCommandsParallel name reset initialState commands  =
+  testProperty name . withRetries 10 . property $ do
+  actions <- forAll $
+    Gen.parallel (Range.linear 1 100) (Range.linear 1 10) initialState commands
+  test $ do
+    evalIO reset
+    executeParallel initialState actions
 
 makeLensesWith abbreviatedFields ''PlayerWithRsp
