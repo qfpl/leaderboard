@@ -24,7 +24,6 @@ import           Data.Semigroup                         ((<>))
 import qualified Data.Text                              as T
 import           Data.Text.Encoding                     (encodeUtf8)
 import           Database.Beam                          (unAuto)
-import           Database.PostgreSQL.Simple.Transaction (withTransactionSerializable)
 import           Servant                                ((:<|>) ((:<|>)), (:>),
                                                          Get, JSON, Post,
                                                          ReqBody, ServantErr,
@@ -122,20 +121,21 @@ registerFirst
 registerFirst jwts rp =
   withLabel (Label "/register-first") $ do
   Log.debug $ "Inserting player: " <> (T.pack . show $ rp)
-  -- Possible race condition between checking count and inserting -- transaction it
-  ep <- withConn $ \conn -> liftIO . withTransactionSerializable conn $ do
+  ep <- withConn $ \conn ->
     let
       rp' = rp {_lbrIsAdmin = Just True}
-      insert = bool (pure . Left $ PlayerExists) (insertPlayer conn rp') . (< 1)
-    numPlayers <- selectPlayerCount conn
-    either (pure . Left) insert numPlayers
+      checkCount conn' = do
+        en <- selectPlayerCount conn'
+        pure $ en >>= bool (Left PlayerExists) (Right ()) . (== 0)
+    in
+      liftIO $ insertPlayer conn (Just checkCount) rp'
   case ep of
     Left PlayerExists -> do
       Log.info "registerFirst called but player(s) already registered"
       throwError $ err403 { errBody = "First user already added." }
     Left e -> do
       Log.error . T.pack . show $ e
-      throwError err500
+      throwError $ err500 { errBody = "Unknown error while registering player" }
     Right p@Player{..} -> do
       pId <- playerId p
       Log.debug $ "Inserted new player: " <> T.pack (show p)
@@ -212,7 +212,7 @@ insertPlayer' rp =
     throwNoPlayer e = do
       Log.error . T.pack . show $ e
       throwError $ err500 {errBody = "Error registering player"}
-  ep <- withConn $ \conn -> liftIO $ insertPlayer conn rp
+  ep <- withConn $ \conn -> liftIO $ insertPlayer conn Nothing rp
   either throwNoPlayer pure ep
 
 getPlayerCount

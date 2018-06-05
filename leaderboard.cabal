@@ -46,6 +46,8 @@ library
                      , optparse-applicative >=0.13 && <0.14
                      , postgresql-simple >=0.5.3.0 && <0.5.4
                      , product-profunctors >=0.8.0.3 && < 0.9
+                     -- TODO: remove random
+                     , random
                      , resource-pool >=0.2.3 && <0.3
                      , retry >=0.7 && <0.8
                      , scrypt >=0.5 && <0.6

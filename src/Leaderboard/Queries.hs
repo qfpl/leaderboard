@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -21,6 +22,9 @@ module Leaderboard.Queries
 
 import           Control.Lens                             ((^?), _head)
 import           Control.Monad                            (void)
+import           Control.Monad.Except                     (ExceptT (ExceptT),
+                                                           runExceptT)
+import           Control.Monad.IO.Class                   (liftIO)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
                                                            Pass (..),
@@ -36,7 +40,11 @@ import qualified Data.Text.Lazy.Encoding                  as TLE
 import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
 import           Database.PostgreSQL.Simple               (Connection)
-import           Database.PostgreSQL.Simple.Transaction   (withTransactionSerializable)
+import           Database.PostgreSQL.Simple.Transaction   (TransactionMode (..), IsolationLevel (Serializable),
+                                                           ReadWriteMode (ReadWrite),
+                                                           withTransactionModeRetry,
+                                                           withTransactionSerializable)
+import           System.Random                            (randomRIO)
 
 import           Leaderboard.Lens                         (_Auto)
 import           Leaderboard.Schema                       (JwkT (..),
@@ -111,21 +119,26 @@ selectPlayerByEmail conn email =
 
 insertPlayer
   :: Connection
+  -> Maybe (Connection -> IO (Either LeaderboardError ()))
   -> RegisterPlayer
   -> IO (Either LeaderboardError Player)
-insertPlayer conn rp@LeaderboardRegistration{..} = do
+insertPlayer conn mp rp@LeaderboardRegistration{..} = do
+  s <- show <$> randomRIO (1 :: Int,1000)
+  putStrLn $ "IN INSERT PLAYER (" <> s <> ")"
   (EncryptedPass ePass) <- encryptPassIO' . Pass $ TE.encodeUtf8 _lbrPassword
   let
+    tm = TransactionMode Serializable ReadWrite
     isAdmin = fromMaybe False _lbrIsAdmin
     newPlayer = Player (B.Auto Nothing) _lbrUsername _lbrEmail ePass isAdmin
     noPlayerError = Left . DbError $ "Error inserting player: " <> pack (show rp)
-  ep <- withTransactionSerializable conn $ do
-    ep <- selectPlayerByEmail conn _lbrEmail
-    case ep of
-      Left NoResult ->
-        tryJustPgError $ insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
-      Left e -> pure (Left e)
-      Right _ -> pure . Left $ PlayerExists
+  ep <- withTransactionModeRetry tm (const True) conn . runExceptT $
+    maybe (pure  ()) (ExceptT . ($ conn)) mp >>= \_ -> do
+      liftIO . putStrLn $ "    RUNNING INSERT PLAYER (" <> s <> ")"
+      ExceptT $ selectPlayerByEmail conn _lbrEmail >>= \case
+        Left NoResult ->
+          pure <$> insertValues conn (_leaderboardPlayers leaderboardDb) [newPlayer]
+        Left e -> pure (Left e)
+        Right _ -> pure . Left $ PlayerExists
   pure $ maybe noPlayerError Right . (^? _head) =<< ep
 
 -- TODO ajmccluskey: return MatchId when it's not Auto (i.e. Maybe)

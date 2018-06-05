@@ -202,7 +202,7 @@ checkCommandsParallel
 checkCommandsParallel name reset initialState commands  =
   testProperty name . withRetries 10 . property $ do
   actions <- forAll $
-    Gen.parallel (Range.linear 1 100) (Range.linear 1 10) initialState commands
+    Gen.parallel (Range.linear 10 100) (Range.linear 1 10) initialState commands
   test $ do
     evalIO reset
     executeParallel initialState actions
