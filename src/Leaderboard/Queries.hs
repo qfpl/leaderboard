@@ -40,7 +40,7 @@ import qualified Data.Text.Lazy.Encoding                  as TLE
 import qualified Database.Beam                            as B
 import qualified Database.Beam.Backend.SQL.BeamExtensions as Be
 import           Database.PostgreSQL.Simple               (Connection)
-import           Database.PostgreSQL.Simple.Transaction   (withTransactionSerializable)
+import           Database.PostgreSQL.Simple.Transaction   (withTransactionLevel, IsolationLevel (Serializable))
 
 import           Leaderboard.Lens                         (_Auto)
 import           Leaderboard.Schema                       (JwkT (..),
@@ -162,8 +162,8 @@ selectMatch conn mId =
     B.all_ $ _leaderboardMatches leaderboardDb
 
 -- | When transactions conflict, we don't get good error reporting from beam -- just an empty list
--- of return values. As a workaround, use this  function to assume that an insert failed because of
--- transaction conflicts and retry it.
+-- of results. As a workaround, this function assumes that a query failed because of transaction
+-- conflicts and retries it.
 serializableRetry
   :: Int
   -> Connection
@@ -172,12 +172,12 @@ serializableRetry
 serializableRetry attempts conn act =
   let
     run =
-      ExceptT . withTransactionSerializable conn . runExceptT $ act conn
+      ExceptT . withTransactionLevel Serializable conn . runExceptT $ act conn
     loop n =
       if n == 0
       then throwError NoResult
       else run >>= \case
-        [] -> liftIO (putStrLn "EMPTY INSERT RESULT -- RETRYING") >> loop (n - 1)
+        [] -> loop (n - 1)
         vs -> pure vs
   in
     loop attempts
