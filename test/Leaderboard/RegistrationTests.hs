@@ -37,7 +37,7 @@ import qualified Leaderboard.Schema        as LS
 import           Leaderboard.SharedState   (HasAdmins (admins),
                                             HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
-                                            PlayerWithRsp (..), checkCommands,
+                                            PlayerWithRsp (..), checkCommands, checkCommandsParallel,
                                             clientToken, email, emptyState,
                                             failureClient, genAdminWithRsp,
                                             genPlayerWithRsp, successClient)
@@ -55,6 +55,7 @@ registrationTests truncateTables env =
     testGroup "registration" [
       propRegFirst env truncateTables
     , propRegister env truncateTables
+    , propParallel env truncateTables
     ]
 
 genRegPlayerRandomAdmin
@@ -295,5 +296,13 @@ propRegister
   -> TestTree
 propRegister env reset =
   checkCommands "register-all" reset emptyState $
+    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+
+propParallel
+  :: ClientEnv
+  -> IO ()
+  -> TestTree
+propParallel env reset =
+  checkCommandsParallel "register-parallel" reset emptyState $
     ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
 
