@@ -1,18 +1,26 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE AllowAmbiguousTypes       #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 
 module Database.PgErrors where
 
 import           Control.Exception          (Exception, SomeException,
                                              fromException, tryJust)
-import           Data.Maybe                 (isJust)
-import           Database.PostgreSQL.Simple (FormatError (..), SqlError (..))
+import           Data.Monoid                (First (First), getFirst)
+import qualified Database.PostgreSQL.Simple as Pg
 
 data PostgresException =
-    PgSqlError SqlError
-  | PgFormatError FormatError
+    PgSqlError Pg.SqlError
+  | PgFormatError Pg.FormatError
+  | PgQueryError Pg.QueryError
+  | PgResultError Pg.ResultError
   deriving (Eq, Show)
+
+-- | Hide the exception type so we can throw all our constructors in a list and
+-- @foldMap@ over them. Saves us some boilerplate.
+data P =
+  forall e. Exception e => P (e -> PostgresException)
 
 tryJustPg
   :: IO a
@@ -20,18 +28,9 @@ tryJustPg
 tryJustPg =
   tryJust fromPgException
   where
-    fromPgException se
-      | isExceptionOfType @SqlError se = toPgError se PgSqlError
-      | isExceptionOfType @FormatError se = toPgError se PgFormatError
-      | otherwise = Nothing
-
-isExceptionOfType
-  :: forall e.
-     Exception e
-  => SomeException
-  -> Bool
-isExceptionOfType se =
-  isJust (fromException se :: Maybe e)
+    es = [P PgSqlError, P PgFormatError, P PgQueryError, P PgResultError]
+    fromPgException se =
+      getFirst . foldMap (\(P f) -> First $ toPgError se f) $ es
 
 toPgError
   :: forall e.
