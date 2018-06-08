@@ -34,7 +34,7 @@ import           Test.Tasty                (TestTree, testGroup)
 
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (HasAdmins (admins),
+import           Leaderboard.SharedState   (HasAdmins (admins), SeqOrPara (..),
                                             HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), checkCommands, checkCommandsParallel,
@@ -104,15 +104,19 @@ cGetPlayerCount
      , HasPlayers state
      , HasAdmins state
      )
-  => ClientEnv
+  => SeqOrPara
+  -> ClientEnv
   -> Command n m state
-cGetPlayerCount env =
+cGetPlayerCount sop env =
   let
-    gen _s = Just . pure $ GetPlayerCount
+    canRun s = sop == Sequential || (s ^. players & not . null)
+    gen' = Just (pure GetPlayerCount)
+    gen s = bool Nothing gen' $ canRun s
     exe _i = evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
   in
     Command gen exe [
-      Ensure $ \s _sNew _i c -> do
+      Require $ \s _i -> canRun s
+    , Ensure $ \s _sNew _i c -> do
         length (s ^. players) === fromIntegral c
         assert $ length (s ^. admins) <= fromIntegral c
     ]
@@ -288,7 +292,7 @@ propRegFirst
   -> TestTree
 propRegFirst env reset =
   checkCommands "register-first" reset emptyState $
-    ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
+    ($ env) <$> [cRegisterFirst, cGetPlayerCount Sequential, cRegisterFirstForbidden]
 
 propRegister
   :: ClientEnv
@@ -296,7 +300,7 @@ propRegister
   -> TestTree
 propRegister env reset =
   checkCommands "register-all" reset emptyState $
-    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount Sequential, cMe]
 
 propParallel
   :: ClientEnv
@@ -304,5 +308,5 @@ propParallel
   -> TestTree
 propParallel env reset =
   checkCommandsParallel "register-parallel" reset emptyState $
-    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount, cMe]
+    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount Parallel, cMe]
 

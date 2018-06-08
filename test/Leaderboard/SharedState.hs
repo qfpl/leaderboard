@@ -36,6 +36,14 @@ import           Test.Tasty.Hedgehog    (testProperty)
 import           Leaderboard.TestClient (fromLbToken)
 import           Leaderboard.Types      (ResponsePlayer (..), RqMatch (..))
 
+-- | Whether or not we're running sequential or parallel tests. It is important in
+-- parallel tests that we always register the first user in the sequential prefix.
+-- This is because
+data SeqOrPara =
+    Sequential
+  | Parallel
+  deriving (Eq, Show)
+
 -- | Map emails to players and keep a set of admin emails
 data LeaderboardState (v :: * -> *) =
   LeaderboardState
