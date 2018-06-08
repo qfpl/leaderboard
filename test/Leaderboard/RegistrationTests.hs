@@ -64,12 +64,12 @@ genRegPlayerRandomAdmin
   -> n RegisterPlayer
 genRegPlayerRandomAdmin ps =
   let
-    genNonEmptyUnicode = Gen.text (Range.linear 1 20) Gen.alphaNum
+    genNonEmptyAlphaNum = Gen.text (Range.linear 1 20) Gen.alphaNum
   in
     LeaderboardRegistration
-      <$> Gen.filter (`S.notMember` M.keysSet ps) genNonEmptyUnicode
-      <*> genNonEmptyUnicode
-      <*> genNonEmptyUnicode
+      <$> Gen.filter (`S.notMember` M.keysSet ps) genNonEmptyAlphaNum
+      <*> genNonEmptyAlphaNum
+      <*> genNonEmptyAlphaNum
       <*> Gen.maybe Gen.bool
 
 mkPlayerWithRsp
