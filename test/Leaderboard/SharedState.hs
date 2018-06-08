@@ -16,9 +16,7 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
 import           Data.Text              (Text)
-import           Data.Time              (LocalTime, UTCTime (UTCTime),
-                                         fromGregorian, secondsToDiffTime, utc,
-                                         utcToLocalTime)
+import           Data.Time              (LocalTime)
 import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
@@ -164,24 +162,6 @@ genPlayerWithRsp ps =
   if null ps
   then Nothing
   else pure . fmap snd . Gen.element . M.toList $ ps
-
--- | Generate a UTC time stamp stored as LocalTime. @beam-postgres@ barfs on UTCTime
--- so doing this as a workaround for now.
-genTimestamp
-  :: MonadGen n
-  => n LocalTime
-genTimestamp =
-  let
-    gYear = Gen.int (Range.linearFrom 2000 1970 2100)
-    gMonth = Gen.int (Range.linear 1 12)
-    -- fromGregorian automatically trims to valid dates, so 2001-02-31 becomes 2001-02-28
-    gDay = Gen.int (Range.linear 1 31)
-    hToS = (* 3600)
-    gSeconds = Gen.int (Range.linearFrom (hToS 12) 0 86400)
-    gUTCTimeDay = fromGregorian . fromIntegral <$> gYear <*> gMonth <*> gDay
-    gDiffTime = secondsToDiffTime . fromIntegral <$> gSeconds
-  in
-    fmap (utcToLocalTime utc) . UTCTime <$> gUTCTimeDay <*> gDiffTime
 
 checkCommands
   :: forall state.
