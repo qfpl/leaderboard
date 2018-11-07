@@ -234,7 +234,7 @@ cRegisterFirstForbidden env =
 --------------------------------------------------------------------------------
 
 data Register (v :: * -> *) =
-  Register RegisterPlayer (PlayerWithRsp v)
+  Register RegisterPlayer (Var ResponsePlayer v)
   deriving (Eq, Show)
 instance HTraversable Register where
   htraverse f (Register rp PlayerWithRsp{..}) =

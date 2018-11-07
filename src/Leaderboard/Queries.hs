@@ -24,7 +24,6 @@ import           Control.Lens                             ((^?), _head)
 import           Control.Monad                            (void)
 import           Control.Monad.Except                     (throwError, ExceptT (ExceptT),
                                                            runExceptT)
-import           Control.Monad.IO.Class                   (liftIO)
 import           Crypto.JOSE                              (JWK)
 import           Crypto.Scrypt                            (EncryptedPass (..),
                                                            Pass (..),

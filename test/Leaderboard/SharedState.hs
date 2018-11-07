@@ -11,7 +11,7 @@
 module Leaderboard.SharedState where
 
 import           Control.Lens           (Lens', abbreviatedFields, lens,
-                                         makeLensesWith)
+                                         makeLensesWith, (^.), (^..), to, at)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
@@ -141,27 +141,6 @@ successClient
   -> m (Either ServantError a)
 successClient ce ma =
   liftIO $ runClientM ma ce
-
-genAdminWithRsp
-  :: MonadGen n
-  => LeaderboardState v
-  -> Maybe (n (PlayerWithRsp v))
-genAdminWithRsp (LeaderboardState ps as _ms) =
-  -- TODO ajmccluskey: be better
-  -- Emails in admin _must_ be a subset of those in players. Without a Traversable
-  -- instance for Gen I couldn't make this be not partial.
-  if null as
-  then Nothing
-  else pure $ (M.!) ps <$> (Gen.element . S.toList $ as)
-
-genPlayerWithRsp
-  :: MonadGen n
-  => PlayerMap v
-  -> Maybe (n (PlayerWithRsp v))
-genPlayerWithRsp ps =
-  if null ps
-  then Nothing
-  else pure . fmap snd . Gen.element . M.toList $ ps
 
 checkCommands
   :: forall state.
