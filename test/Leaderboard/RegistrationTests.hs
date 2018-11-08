@@ -22,11 +22,12 @@ import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
-import           Hedgehog                  (Callback (..), Command (Command), Concrete (Concrete),
+import           Hedgehog                  (Callback (..), Command (Command),
+                                            Concrete (Concrete),
                                             HTraversable (htraverse), MonadGen,
                                             MonadTest, Var (Var), annotateShow,
-                                            assert, concrete, evalEither,
-                                            failure, success, (===))
+                                            assert, evalEither, failure,
+                                            success, (===))
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
 
@@ -35,19 +36,19 @@ import           Test.Tasty                (TestTree, testGroup)
 import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp)
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (HasAdmins (admins), TestRsp (TestRsp),
+import           Leaderboard.SharedState   (HasAdmins (admins),
                                             HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
                                             PlayerWithRsp (..), SeqOrPara (..),
-                                            checkCommands, pwrRsp,
+                                            TestRsp (TestRsp), checkCommands,
                                             checkCommandsParallel, clientToken,
-                                            pwrEmail, emptyState, failureClient,
-                                            successClient, pwrUsername)
+                                            emptyState, failureClient, pwrEmail,
+                                            pwrUsername, successClient)
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
-import           Leaderboard.Types         (PlayerCount (..),
-                                            RegisterPlayer (..),
-                                            ResponsePlayer (..), HasResponsePlayer (..))
+import           Leaderboard.Types         (HasResponsePlayer (..),
+                                            PlayerCount (..),
+                                            RegisterPlayer (..))
 
 registrationTests
   :: IO ()

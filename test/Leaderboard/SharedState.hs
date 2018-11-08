@@ -7,12 +7,12 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies           #-}
 
 module Leaderboard.SharedState where
 
-import           Control.Lens           (Lens', abbreviatedFields, lens,
-                                         makeLenses, (^.), to, _Wrapped, makeWrapped)
+import           Control.Lens           (Lens', lens, makeLenses, makeWrapped,
+                                         to, (^.), _Wrapped)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
@@ -34,7 +34,8 @@ import           Test.Tasty             (TestTree)
 import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
-import           Leaderboard.Types      (ResponsePlayer (..), RqMatch (..), HasResponsePlayer (..))
+import           Leaderboard.Types      (HasResponsePlayer (..),
+                                         ResponsePlayer (..), RqMatch (..))
 
 -- | Whether or not we're running sequential or parallel tests. It is important in
 -- parallel tests that we always register the first user in the sequential prefix.

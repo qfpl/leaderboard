@@ -6,10 +6,9 @@ import           Hedgehog                (MonadGen, Var)
 import qualified Hedgehog.Gen            as Gen
 import qualified Hedgehog.Range          as Range
 
-import           Control.Lens            (at, to, (^.), (^..), (&), ix)
+import           Control.Lens            ((&), (^.))
 import qualified Data.Map                as M
 import qualified Data.Set                as S
-import           Data.Text               (Text)
 import           Data.Time               (LocalTime, UTCTime (UTCTime),
                                           fromGregorian, secondsToDiffTime, utc,
                                           utcToLocalTime)
@@ -17,10 +16,10 @@ import           Database.Beam           (Auto (Auto))
 
 import           Leaderboard.Schema      (PlayerId)
 import qualified Leaderboard.Schema      as LS
-import           Leaderboard.SharedState (HasAdmins, HasPlayers, PlayerMap, TestRsp,
-                                          PlayerWithRsp, admins, players, pwrRsp)
+import           Leaderboard.SharedState (HasAdmins, PlayerMap, PlayerWithRsp,
+                                          TestRsp, admins)
 import           Leaderboard.Types       (RegisterPlayer (LeaderboardRegistration),
-                                          ResponsePlayer, RqMatch (RqMatch), HasResponsePlayer)
+                                          RqMatch (RqMatch))
 
 genRegPlayer
   :: MonadGen n
