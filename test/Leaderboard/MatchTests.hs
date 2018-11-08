@@ -32,14 +32,14 @@ import qualified Hedgehog.Range                as Range
 import           Test.Tasty                    (TestTree, testGroup)
 import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Leaderboard.Gens              (genTimestamp)
+import           Leaderboard.Gens              (genPlayerWithRsp, genTimestamp)
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, PlayerWithRsp (..),
                                                 TestMatch (..), checkCommands,
                                                 clientToken, emptyState,
-                                                failureClient, genPlayerWithRsp,
-                                                successClient, testToRq)
+                                                failureClient, successClient,
+                                                testToRq)
 import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
                                                 getPlayerCount, mkMatchClient,
                                                 register, registerFirst)

@@ -22,7 +22,7 @@ import qualified Data.Set                  as S
 import           Network.HTTP.Types.Status (forbidden403)
 import           Servant.Client            (ClientEnv, ServantError (..))
 
-import           Hedgehog                  (Callback (..), Command (Command),
+import           Hedgehog                  (Callback (..), Command (Command), Concrete (Concrete),
                                             HTraversable (htraverse), MonadGen,
                                             MonadTest, Var (Var), annotateShow,
                                             assert, concrete, evalEither,
@@ -32,20 +32,22 @@ import qualified Hedgehog.Range            as Range
 
 import           Test.Tasty                (TestTree, testGroup)
 
+import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp)
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (HasAdmins (admins), SeqOrPara (..),
+import           Leaderboard.SharedState   (HasAdmins (admins), TestRsp (TestRsp),
                                             HasPlayers (players),
                                             LeaderboardState (..), PlayerMap,
-                                            PlayerWithRsp (..), checkCommands, checkCommandsParallel,
-                                            clientToken, email, emptyState,
-                                            failureClient, genAdminWithRsp,
-                                            genPlayerWithRsp, successClient)
+                                            PlayerWithRsp (..), SeqOrPara (..),
+                                            checkCommands, pwrRsp,
+                                            checkCommandsParallel, clientToken,
+                                            pwrEmail, emptyState, failureClient,
+                                            successClient, pwrUsername)
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (PlayerCount (..),
                                             RegisterPlayer (..),
-                                            ResponsePlayer (..))
+                                            ResponsePlayer (..), HasResponsePlayer (..))
 
 registrationTests
   :: IO ()
@@ -74,7 +76,7 @@ genRegPlayerRandomAdmin ps =
 
 mkPlayerWithRsp
   :: RegisterPlayer
-  -> Var ResponsePlayer v
+  -> Var TestRsp v
   -> PlayerWithRsp v
 mkPlayerWithRsp LeaderboardRegistration{..} rsp =
   let
@@ -142,7 +144,7 @@ cMe env =
     exe (Me pwr) = evalEither =<< successClient env (me (clientToken pwr))
   in
     Command gen exe
-    [ Require $ \s (Me PlayerWithRsp{..}) -> anyOf (players . each . email) (== _pwrEmail) s
+    [ Require $ \s (Me PlayerWithRsp{..}) -> anyOf (players . each . pwrEmail) (== _pwrEmail) s
     , Require $ \s _in -> not (null (s ^. admins))
     , Ensure $ \sOld _sNew _i p@Player{..} ->
         case sOld ^. players . at _playerEmail of
@@ -152,8 +154,8 @@ cMe env =
             annotateShow . length $ sOld ^. players
             annotateShow pwr
             annotateShow p
-            (_rspId . concrete $ _pwrRsp) === LS.PlayerId _playerId
-            _pwrUsername === _playerUsername
+            pwr ^. rspId & (=== LS.PlayerId _playerId)
+            pwr ^. pwrUsername === _playerUsername
             _pwrEmail === _playerEmail
             pwrAdmin === _playerIsAdmin
           Nothing -> failure
@@ -192,7 +194,8 @@ cRegisterFirst env =
       else Nothing
     execute (RegFirst rp) =
        -- Force admin flag to true so our local state always aligns with DB
-       evalEither =<< successClient env (registerFirst $ rp {_lbrIsAdmin = Just True})
+      let cRp = registerFirst $ rp {_lbrIsAdmin = Just True}
+       in fmap TestRsp $ evalEither =<< successClient env cRp
   in
     Command gen execute [
       Require $ \state _input -> state ^. players & null
@@ -200,7 +203,7 @@ cRegisterFirst env =
         let
           lbr' = lbr {_lbrIsAdmin = Just True}
           ps = M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)
-          as = S.singleton _lbrEmail
+          as = S.singleton rsp
          in
           set players ps . set admins as $ state
     , Ensure $ \_sOld sNew (RegFirst _rp) _t -> (sNew ^. players & length) === 1
@@ -234,12 +237,12 @@ cRegisterFirstForbidden env =
 --------------------------------------------------------------------------------
 
 data Register (v :: * -> *) =
-  Register RegisterPlayer (Var ResponsePlayer v)
+  Register RegisterPlayer (Var TestRsp v)
   deriving (Eq, Show)
+
 instance HTraversable Register where
-  htraverse f (Register rp PlayerWithRsp{..}) =
-    let mkFP (Var rsp) = fmap (\_pwrRsp -> PlayerWithRsp{..}) $ Var <$> f rsp
-     in Register rp <$> mkFP _pwrRsp
+  htraverse f (Register rp (Var rsp)) =
+    Register rp <$> (Var <$> f rsp)
 
 cRegister
   :: ( MonadGen n
@@ -254,34 +257,35 @@ cRegister env =
       if null as
       then Nothing
       else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminWithRsp rs
-    execute (Register rp p) =
-      evalEither =<< successClient env (register (clientToken p) rp)
+    execute (Register rp rsp) =
+      fmap TestRsp $ evalEither =<< successClient env (register (clientToken rsp) rp)
   in
     Command gen execute [
       Require $ \(LeaderboardState ps _as _ms) (Register rp _p) ->
         M.notMember (_lbrEmail rp) ps
     , Require $ \(LeaderboardState _ps as _ms) (Register _rp p) ->
-        S.member (_pwrEmail p) as
+        S.member p as
     , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) rsp ->
         let
           newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
           newAdmins =
             case _lbrIsAdmin of
-              Just True -> S.insert _lbrEmail as
+              Just True -> S.insert rsp as
               _         -> as
         in
           LeaderboardState newPlayers newAdmins ms
     , Ensure $ \(LeaderboardState psOld asOld _msOld)
                 (LeaderboardState psNew asNew _msNew)
                 (Register LeaderboardRegistration{..} _t)
-                _output -> do
+                rsp -> do
         assert $ M.member _lbrEmail psNew
         assert $ M.notMember _lbrEmail psOld
         length psNew === length psOld + 1
+        let vRsp = Var (Concrete rsp)
         case _lbrIsAdmin of
           Just True -> do
-            assert $ S.member _lbrEmail asNew
-            assert $ S.notMember _lbrEmail asOld
+            assert $ S.member vRsp asNew
+            assert $ S.notMember vRsp asOld
             length asNew === length asOld + 1
           _ -> success
     ]

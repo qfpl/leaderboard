@@ -17,10 +17,10 @@ import           Database.Beam           (Auto (Auto))
 
 import           Leaderboard.Schema      (PlayerId)
 import qualified Leaderboard.Schema      as LS
-import           Leaderboard.SharedState (HasAdmins, HasPlayers, PlayerMap,
-                                          PlayerWithRsp, admins, players, rsp, HasRsp)
+import           Leaderboard.SharedState (HasAdmins, HasPlayers, PlayerMap, TestRsp,
+                                          PlayerWithRsp, admins, players, pwrRsp)
 import           Leaderboard.Types       (RegisterPlayer (LeaderboardRegistration),
-                                          ResponsePlayer, RqMatch (RqMatch))
+                                          ResponsePlayer, RqMatch (RqMatch), HasResponsePlayer)
 
 genRegPlayer
   :: MonadGen n
@@ -72,19 +72,17 @@ genRqMatch = do
 genAdminWithRsp
   :: ( MonadGen n
      , HasAdmins s
-     , HasPlayers s
      )
   => s v
-  -> Maybe (n (Var ResponsePlayer v))
+  -> Maybe (n (Var TestRsp v))
 genAdminWithRsp s =
   -- TODO ajmccluskey: be better
   -- Emails in admin _must_ be a subset of those in players. Without a Traversable
   -- instance for Gen I couldn't make this be not partial.
   if null (s ^. admins)
   then Nothing
-  else Just $ do
-    adminEmail <- s ^. admins & Gen.element . S.toList
-    s ^. players . to (M.! adminEmail) . rsp & pure
+  else Just $
+    s ^. admins & Gen.element . S.toList
 
 genPlayerWithRsp
   :: MonadGen n

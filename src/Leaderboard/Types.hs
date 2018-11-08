@@ -5,7 +5,7 @@
 
 module Leaderboard.Types where
 
-import           Control.Lens               (Lens', lens, makeLenses)
+import           Control.Lens               (Lens', lens, makeLenses, makeClassy)
 import           Control.Monad              ((<=<))
 import qualified Control.Monad.Log          as Log
 import           Crypto.JOSE                (JWK)
@@ -99,7 +99,7 @@ instance ToJSON PlayerCount where
 -- doesn't have, so this avoids the orphans.
 newtype Token
   = Token { getToken :: ByteString }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Ord, Generic, Show)
 instance FromJSON Token where
   parseJSON =
     withObject "Token" $ \v ->
@@ -142,7 +142,7 @@ data ResponsePlayer =
   { _rspId    :: PlayerId
   , _rspToken :: Token
   }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 instance FromJSON ResponsePlayer where
   parseJSON =
@@ -189,3 +189,5 @@ instance ToJSON RqMatch where
     , "player2Score" .= _matchPlayer2Score
     , "time" .= _matchTime
     ]
+
+makeClassy ''ResponsePlayer
