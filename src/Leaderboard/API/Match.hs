@@ -20,7 +20,7 @@ import           Database.Beam               (Auto (Auto))
 import           Database.PostgreSQL.Simple  (Connection)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Capture,
                                               DeleteNoContent, Get, JSON,
-                                              NoContent, PostNoContent,
+                                              NoContent, Post,
                                               PutNoContent, ReqBody, ServantErr,
                                               ServerT, err500, errBody)
 import           Servant.Auth.Server         (Auth, AuthResult)
@@ -35,7 +35,7 @@ import           Leaderboard.Types           (LeaderboardError,
 
 type MatchAPI auths =
   Auth auths PlayerSession :> "matches" :>
-  (      "add" :> ReqBody '[JSON] RqMatch :> PostNoContent '[JSON] Int
+  (      "add" :> ReqBody '[JSON] RqMatch :> Post '[JSON] Int
     :<|> "list" :> Get '[JSON] [Match]
     :<|> "get" :> Capture "id" MatchId :> Get '[JSON] Match
     :<|> Capture "id" MatchId :> DeleteNoContent '[JSON] NoContent
