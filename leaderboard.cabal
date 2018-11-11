@@ -7,8 +7,9 @@ version:             0.1.0.0
 -- description:         
 license:             BSD3
 license-file:        LICENSE
-author:              Isaac Elliott
-maintainer:          isaace71295@gmail.com
+author:              Queensland Functional Programming Lab, Data 61, CSIRO
+maintainer:          contact@qfpl.io
+copyright:           Commonwealth Science and Industrial Research Organisation, 2018
 -- copyright:           
 -- category:            
 build-type:          Simple
