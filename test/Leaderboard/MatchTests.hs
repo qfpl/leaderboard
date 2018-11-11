@@ -8,12 +8,9 @@ module Leaderboard.MatchTests
   ( matchTests
   ) where
 
-import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Control.Monad.IO.Class        (MonadIO)
 import           Data.Aeson                    (encode)
 import qualified Data.Map                      as M
-import qualified Data.Set                      as S
-import           Data.Time                     (fromGregorian,
-                                                secondsToDiffTime)
 import           Data.Traversable              (sequenceA)
 import           Servant.Client                (ClientEnv)
 
@@ -22,29 +19,21 @@ import           Hedgehog                      (Callback (..),
                                                 Concrete (Concrete),
                                                 HTraversable (htraverse),
                                                 MonadGen, MonadTest, Var (Var),
-                                                annotateShow, assert, concrete,
-                                                evalEither, executeSequential,
-                                                failure, forAll, property,
-                                                (===))
+                                                annotateShow, assert,
+                                                evalEither, (===))
 import qualified Hedgehog.Gen                  as Gen
 import qualified Hedgehog.Range                as Range
 
 import           Test.Tasty                    (TestTree, testGroup)
-import           Test.Tasty.Hedgehog           (testProperty)
 
-import           Leaderboard.Gens              (genTimestamp)
+import           Leaderboard.Gens              (genPlayerWithRsp, genTimestamp)
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, PlayerWithRsp (..),
                                                 TestMatch (..), checkCommands,
                                                 clientToken, emptyState,
-                                                failureClient, genPlayerWithRsp,
                                                 successClient, testToRq)
-import           Leaderboard.TestClient        (MatchClient (..), fromLbToken,
-                                                getPlayerCount, mkMatchClient,
-                                                register, registerFirst)
-import           Leaderboard.Types             (ResponsePlayer (..),
-                                                RqMatch (RqMatch))
+import           Leaderboard.TestClient        (MatchClient (..),mkMatchClient)
 
 matchTests
   :: IO ()
@@ -130,8 +119,6 @@ cAddMatch env =
         assert $ M.notMember vmId msOld
         length msNew === length msOld + 1
     ]
-
-cListMatches = undefined
 
 propMatchTests
   :: ClientEnv

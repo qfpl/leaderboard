@@ -7,11 +7,12 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
 
 module Leaderboard.SharedState where
 
-import           Control.Lens           (Lens', abbreviatedFields, lens,
-                                         makeLensesWith)
+import           Control.Lens           (Lens', lens, makeLenses, makeWrapped,
+                                         to, (^.), _Wrapped)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
@@ -21,18 +22,20 @@ import           Servant.Auth.Client    (Token)
 import           Servant.Client         (ClientEnv, ClientM, ServantError (..),
                                          runClientM)
 
-import           Hedgehog               (Command, Concrete, Eq1, Gen, TestT,
-                                         HTraversable (htraverse), MonadGen,
-                                         PropertyT, Show1, Var (Var), concrete,
-                                         executeParallel, executeSequential,
-                                         forAll, property, test, withRetries, evalIO)
+import           Hedgehog               (Command, Concrete (Concrete), Eq1, Gen,
+                                         HTraversable (htraverse), PropertyT,
+                                         Show1, TestT, Var (Var), concrete,
+                                         evalIO, executeParallel,
+                                         executeSequential, forAll, property,
+                                         test, withRetries)
 import qualified Hedgehog.Gen           as Gen
 import qualified Hedgehog.Range         as Range
 import           Test.Tasty             (TestTree)
 import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
-import           Leaderboard.Types      (ResponsePlayer (..), RqMatch (..))
+import           Leaderboard.Types      (HasResponsePlayer (..),
+                                         ResponsePlayer (..), RqMatch (..))
 
 -- | Whether or not we're running sequential or parallel tests. It is important in
 -- parallel tests that we always register the first user in the sequential prefix.
@@ -46,7 +49,7 @@ data SeqOrPara =
 data LeaderboardState (v :: * -> *) =
   LeaderboardState
   { _players :: PlayerMap v
-  , _admins  :: S.Set Text
+  , _admins  :: S.Set (Var TestRsp v)
   , _matches :: MatchMap v
   }
 deriving instance Show1 v => Show (LeaderboardState v)
@@ -60,7 +63,8 @@ instance HasPlayers LeaderboardState where
   players = lens _players (\s ps -> s {_players = ps})
 
 class HasAdmins (s :: (* -> *) -> *) where
-  admins :: Lens' (s v) (S.Set Text)
+  admins :: Lens' (s v) (S.Set (Var TestRsp v))
+
 instance HasAdmins LeaderboardState where
   admins = lens _admins (\s ps -> s {_admins = ps})
 
@@ -74,7 +78,7 @@ type MatchMap v =  M.Map (Var Int v) (TestMatch v)
 
 data PlayerWithRsp (v :: * -> *) =
   PlayerWithRsp
-  { _pwrRsp      :: Var ResponsePlayer v
+  { _pwrRsp      :: Var TestRsp v
   , _pwrEmail    :: Text
   , _pwrUsername :: Text
   , _pwrPassword :: Text
@@ -90,8 +94,8 @@ instance HTraversable PlayerWithRsp where
 
 data TestMatch v =
   TestMatch
-  { _tmPlayer1      :: Var ResponsePlayer v
-  , _tmPlayer2      :: Var ResponsePlayer v
+  { _tmPlayer1      :: Var TestRsp v
+  , _tmPlayer2      :: Var TestRsp v
   , _tmPlayer1Score :: Int
   , _tmPlayer2Score :: Int
   , _tmTime         :: LocalTime
@@ -110,8 +114,8 @@ testToRq
   -> RqMatch
 testToRq TestMatch{..} =
   let
-    _matchPlayer1 = _rspId . concrete $ _tmPlayer1
-    _matchPlayer2  = _rspId . concrete $ _tmPlayer2
+    _matchPlayer1 = _tmPlayer1 ^. concreteLens . rspId
+    _matchPlayer2 = _tmPlayer2 ^. concreteLens . rspId
     _matchPlayer1Score  = _tmPlayer1Score
     _matchPlayer2Score = _tmPlayer2Score
     _matchTime = _tmTime
@@ -119,10 +123,11 @@ testToRq TestMatch{..} =
     RqMatch{..}
 
 clientToken
-  :: PlayerWithRsp Concrete
+  :: HasResponsePlayer s
+  => s
   -> Token
-clientToken PlayerWithRsp{..} =
-  fromLbToken . _rspToken . concrete $ _pwrRsp
+clientToken s  =
+  s ^. rspToken . to fromLbToken
 
 -- | Swap the left and rights in the `Either` returned by `runClientM` because
 --   we're expecting failure.
@@ -141,27 +146,6 @@ successClient
   -> m (Either ServantError a)
 successClient ce ma =
   liftIO $ runClientM ma ce
-
-genAdminWithRsp
-  :: MonadGen n
-  => LeaderboardState v
-  -> Maybe (n (PlayerWithRsp v))
-genAdminWithRsp (LeaderboardState ps as _ms) =
-  -- TODO ajmccluskey: be better
-  -- Emails in admin _must_ be a subset of those in players. Without a Traversable
-  -- instance for Gen I couldn't make this be not partial.
-  if null as
-  then Nothing
-  else pure $ (M.!) ps <$> (Gen.element . S.toList $ as)
-
-genPlayerWithRsp
-  :: MonadGen n
-  => PlayerMap v
-  -> Maybe (n (PlayerWithRsp v))
-genPlayerWithRsp ps =
-  if null ps
-  then Nothing
-  else pure . fmap snd . Gen.element . M.toList $ ps
 
 checkCommands
   :: forall state.
@@ -195,4 +179,28 @@ checkCommandsParallel name reset initialState commands  =
     evalIO reset
     executeParallel initialState actions
 
-makeLensesWith abbreviatedFields ''PlayerWithRsp
+concreteLens ::
+  Lens' (Var a Concrete) a
+concreteLens =
+  lens concrete (const $ Var . Concrete)
+
+newtype TestRsp =
+  TestRsp ResponsePlayer
+  deriving (Eq, Show, Ord)
+
+instance HasResponsePlayer TestRsp where
+  responsePlayer = _Wrapped . responsePlayer
+  -- rspId = responsePlayer . rspId
+  -- rspToken = responsePlayer . rspToken
+
+instance HasResponsePlayer (Var TestRsp Concrete) where
+  responsePlayer = concreteLens . _Wrapped
+
+makeLenses ''PlayerWithRsp
+
+instance HasResponsePlayer (PlayerWithRsp Concrete) where
+  responsePlayer = pwrRsp . concreteLens . _Wrapped
+  -- rspId = responsePlayer . rspId
+  -- rspToken = responsePlayer . rspToken
+
+makeWrapped ''TestRsp

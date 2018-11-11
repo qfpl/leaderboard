@@ -39,11 +39,17 @@ instance Exception DbInitError
 
 main :: IO ()
 main =
+  doSomeTests allTheTests
+
+doSomeTests ::
+  (IO () -> ClientEnv -> TestTree)
+  -> IO ()
+doSomeTests ts =
   withDb $ \DB{..} -> do
   let
     ao = ApplicationOptions connectionInfo 7645 RunApp (Just Log.levelWarning)
     tt = truncateTables connectionInfo
-  withLeaderboard ao (defaultMain . allTheTests tt)
+  withLeaderboard ao (defaultMain . ts tt)
 
 allTheTests
   :: IO ()
