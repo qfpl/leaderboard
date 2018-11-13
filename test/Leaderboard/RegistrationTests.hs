@@ -30,9 +30,12 @@ import           Hedgehog                  (Callback (..), Command (Command),
                                             HTraversable (htraverse), MonadGen,
                                             MonadTest, Symbolic, Var (Var),
                                             annotateShow, assert, evalEither,
-                                            failure, success, (===))
-
+                                            evalIO, executeSequential, failure,
+                                            forAll, property, success, (===))
+import qualified Hedgehog.Gen              as Gen
+import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
+import           Test.Tasty.Hedgehog       (testProperty)
 
 import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp,
                                             genRegPlayer,
@@ -62,8 +65,8 @@ registrationTests
 registrationTests truncateTables env =
     testGroup "registration" [
       propRegFirst env truncateTables
-    , propRegister env truncateTables
-    , propParallel env truncateTables
+    -- , propRegister env truncateTables
+    -- , propParallel env truncateTables
     ]
 
 --------------------------------------------------------------------------------
@@ -77,26 +80,22 @@ instance HTraversable GetPlayerCount where
   htraverse _ _ = pure GetPlayerCount
 
 cGetPlayerCount
-  :: forall m n state.
-     ( MonadGen n
+  :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayerCount state
      )
-  => SeqOrPara
-  -> ClientEnv
-  -> Command n m state
-cGetPlayerCount sop env =
+  => ClientEnv
+  -> Command n m RegFirstState
+cGetPlayerCount env =
   let
-    canRun s = sop == Sequential || (s ^. playerCount & (> 0))
-    gen' = Just (pure GetPlayerCount)
-    gen s = bool Nothing gen' $ canRun s
-    exe _i = evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
+    gen _state =
+      Just (pure GetPlayerCount)
+    exe _i =
+      evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
   in
     Command gen exe [
-      Require $ \s _i -> canRun s
-    , Ensure $ \s _sNew _i c ->
-        (s ^. playerCount) === fromIntegral c
+      Ensure $ \(RegFirstState n) _sNew _i c ->
+        n === fromIntegral c
     ]
 
 newtype Me (v :: * -> *) =
@@ -151,50 +150,44 @@ cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayerCount state
-     , CanRegisterPlayers state
      )
-  => (state Symbolic -> n RegisterPlayer)
-  -> ClientEnv
-  -> Command n m state
-cRegisterFirst genRp env =
+  => ClientEnv
+  -> Command n m RegFirstState
+cRegisterFirst env =
   let
-    gen state =
-      if state ^. playerCount & (== 0)
-      then Just . fmap RegFirst . genRp $ state
+    gen (RegFirstState n) =
+      if n == 0
+      then Just . fmap RegFirst $ genRegPlayer
       else Nothing
     execute (RegFirst rp) =
        -- Force admin flag to true so our local state always aligns with DB
-      let cRp = registerFirst $ rp {_lbrIsAdmin = Just True}
-       in fmap TestRsp $ evalEither =<< successClient env cRp
+       fmap TestRsp $ evalEither =<< successClient env (registerFirst rp)
   in
     Command gen execute [
-      Require $ \state _input -> state ^. playerCount & (== 0)
-    , Update $ \state (RegFirst lbr) rsp ->
-        registerPlayer state (lbr {_lbrIsAdmin = Just True}) rsp
-    , Ensure $ \_sOld sNew (RegFirst _rp) _t -> (sNew ^. playerCount) === 1
+      Require $ \(RegFirstState n) _input -> n == 0
+    , Update $ \_state _input _out ->
+        RegFirstState 1
+    , Ensure $ \_sOld (RegFirstState nNew) (RegFirst _rp) _t -> nNew === 1
     ]
 
 cRegisterFirstForbidden
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayerCount state
-     , Eq (state Concrete)
-     , Show (state Concrete)
      )
-  => (state Symbolic -> n RegisterPlayer)
-  -> ClientEnv
-  -> Command n m state
-cRegisterFirstForbidden genRp env =
+  => ClientEnv
+  -> Command n m RegFirstState
+cRegisterFirstForbidden env =
   let
-    gen s =
-      bool (Just $ RegFirst <$> genRp s) Nothing $ s ^. playerCount . to (== 0)
+    gen (RegFirstState n) =
+      if n == 0
+      then Nothing
+      else Just . fmap RegFirst $ genRegPlayer
     execute (RegFirst rp) =
       evalEither =<< failureClient env (registerFirst rp)
   in
     Command gen execute [
-      Require $ \s _input -> s ^. playerCount . to (> 0)
+      Require $ \(RegFirstState n) _input -> (n > 0)
     , Ensure $ \sOld sNew _input se -> do
         sOld === sNew
         case se of
@@ -258,40 +251,45 @@ propRegFirst
   -> IO ()
   -> TestTree
 propRegFirst env reset =
+  testProperty "register-first" . property $ do
   let
-    genRp = const genRegPlayer
-  in
-    checkCommands "register-first" reset (RegFirstState 0) $
-      ($ env) <$> [cRegisterFirst genRp, cGetPlayerCount Sequential, cRegisterFirstForbidden genRp]
+    commands =
+      ($ env) <$> [cRegisterFirst, cGetPlayerCount, cRegisterFirstForbidden]
+    initialState =
+      RegFirstState 0
+  actions <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState commands
+  evalIO reset
+  executeSequential initialState actions
 
-propRegister
-  :: ClientEnv
-  -> IO ()
-  -> TestTree
-propRegister env reset =
-  let
-    cs = ($ env) <$>
-      [ cRegister
-      , cRegisterFirst genRegPlayerUniqueEmail
-      , cRegisterFirstForbidden genRegPlayerUniqueEmail
-      , cGetPlayerCount Sequential
-      , cMe
-      ]
-  in
-    checkCommands "register-all" reset emptyState cs
+-- propRegister
+--   :: ClientEnv
+--   -> IO ()
+--   -> TestTree
+-- propRegister env reset =
+--   let
+--     cs = ($ env) <$>
+--       [ cRegister
+--       , cRegisterFirst genRegPlayerUniqueEmail
+--       , cRegisterFirstForbidden genRegPlayerUniqueEmail
+--       , cGetPlayerCount Sequential
+--       , cMe
+--       ]
+--   in
+--     checkCommands "register-all" reset emptyState cs
 
-propParallel
-  :: ClientEnv
-  -> IO ()
-  -> TestTree
-propParallel env reset =
-  let
-    cs = ($ env) <$>
-      [ cRegister
-      , cRegisterFirst genRegPlayerUniqueEmail
-      , cRegisterFirstForbidden genRegPlayerUniqueEmail
-      , cGetPlayerCount Parallel
-      , cMe
-      ]
-  in
-    checkCommandsParallel "register-parallel" reset emptyState cs
+-- propParallel
+--   :: ClientEnv
+--   -> IO ()
+--   -> TestTree
+-- propParallel env reset =
+--   let
+--     cs = ($ env) <$>
+--       [ cRegister
+--       , cRegisterFirst genRegPlayerUniqueEmail
+--       , cRegisterFirstForbidden genRegPlayerUniqueEmail
+--       , cGetPlayerCount Parallel
+--       , cMe
+--       ]
+--   in
+--     checkCommandsParallel "register-parallel" reset emptyState cs

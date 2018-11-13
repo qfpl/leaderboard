@@ -41,7 +41,7 @@ matchTests
   -> TestTree
 matchTests resetDb env =
   testGroup "match" [
-    propMatchTests env resetDb
+    -- propMatchTests env resetDb
   ]
 
 genTwoPlayersWithRsps
@@ -120,12 +120,12 @@ cAddMatch env =
         length msNew === length msOld + 1
     ]
 
-propMatchTests
-  :: ClientEnv
-  -> IO ()
-  -> TestTree
-propMatchTests env reset =
-  let
-    genRp = const genRegPlayer
-  in
-    checkCommands "matches" reset emptyState $ ($ env) <$> [cAddMatch, cRegisterFirst genRp, cRegister]
+-- propMatchTests
+--   :: ClientEnv
+--   -> IO ()
+--   -> TestTree
+-- propMatchTests env reset =
+--   let
+--     genRp = const genRegPlayer
+--   in
+--     checkCommands "matches" reset emptyState $ ($ env) <$> [cAddMatch, cRegisterFirst genRp, cRegister]
