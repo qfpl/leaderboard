@@ -26,7 +26,7 @@ import qualified Hedgehog.Range                as Range
 
 import           Test.Tasty                    (TestTree, testGroup)
 
-import           Leaderboard.Gens              (genPlayerWithRsp, genTimestamp)
+import           Leaderboard.Gens              (genPlayerWithRsp, genTimestamp, genRegPlayer)
 import           Leaderboard.RegistrationTests (cRegister, cRegisterFirst)
 import           Leaderboard.SharedState       (LeaderboardState (..),
                                                 PlayerMap, PlayerWithRsp (..),
@@ -125,4 +125,7 @@ propMatchTests
   -> IO ()
   -> TestTree
 propMatchTests env reset =
-  checkCommands "matches" reset emptyState $ ($ env) <$> [cAddMatch, cRegisterFirst, cRegister]
+  let
+    genRp = const genRegPlayer
+  in
+    checkCommands "matches" reset emptyState $ ($ env) <$> [cAddMatch, cRegisterFirst genRp, cRegister]

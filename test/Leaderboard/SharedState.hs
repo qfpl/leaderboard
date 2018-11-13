@@ -11,9 +11,12 @@
 
 module Leaderboard.SharedState where
 
-import           Control.Lens           (Lens', lens, makeLenses, makeWrapped,
-                                         to, (^.), _Wrapped)
+import           Control.Lens           (Getter, Lens', at, lens, makeLenses,
+                                         makeWrapped, to, (%~), (&), (?~), (^.),
+                                         _Wrapped)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.Bool              (bool)
+import           Data.Functor.Classes   (Ord1)
 import qualified Data.Map               as M
 import qualified Data.Set               as S
 import           Data.Text              (Text)
@@ -35,6 +38,7 @@ import           Test.Tasty.Hedgehog    (testProperty)
 
 import           Leaderboard.TestClient (fromLbToken)
 import           Leaderboard.Types      (HasResponsePlayer (..),
+                                         RegisterPlayer (..),
                                          ResponsePlayer (..), RqMatch (..))
 
 -- | Whether or not we're running sequential or parallel tests. It is important in
@@ -44,6 +48,29 @@ data SeqOrPara =
     Sequential
   | Parallel
   deriving (Eq, Show)
+
+newtype RegFirstState (v :: * -> *) =
+  RegFirstState Integer
+  deriving (Eq, Show)
+
+class CanRegisterPlayers (s :: (* -> *) -> *) where
+  registerPlayer ::
+    Ord1 v
+    => s v
+    -> RegisterPlayer
+    -> Var TestRsp v
+    -> s v
+
+instance CanRegisterPlayers RegFirstState where
+  registerPlayer (RegFirstState n) _ _ =
+    RegFirstState (succ n)
+
+class HasPlayerCount s where
+  playerCount :: forall (v :: * -> *). Getter (s v) Integer
+
+instance HasPlayerCount RegFirstState where
+  playerCount =
+    to (\(RegFirstState n) -> n)
 
 -- | Map emails to players and keep a set of admin emails
 data LeaderboardState (v :: * -> *) =
@@ -59,8 +86,18 @@ deriving instance Eq1 v => Eq (LeaderboardState v)
 -- @s@ and @a@ type parameters. This would result in an ambiguous type for @v@.
 class HasPlayers s where
   players :: Lens' (s v) (PlayerMap v)
+
 instance HasPlayers LeaderboardState where
   players = lens _players (\s ps -> s {_players = ps})
+
+instance HasPlayerCount LeaderboardState where
+  playerCount =
+    players . to length . to fromIntegral
+
+instance CanRegisterPlayers LeaderboardState where
+  registerPlayer s lbr@LeaderboardRegistration{..} rsp  =
+    s & players . at _lbrEmail ?~ mkPlayerWithRsp lbr rsp
+      & bool id (admins %~ S.insert rsp) (_lbrIsAdmin == Just True)
 
 class HasAdmins (s :: (* -> *) -> *) where
   admins :: Lens' (s v) (S.Set (Var TestRsp v))
@@ -91,6 +128,20 @@ instance HTraversable PlayerWithRsp where
     let mkP _pwrRsp = PlayerWithRsp{..}
     in case _pwrRsp of
         (Var vr) -> mkP <$> (Var <$> f vr)
+
+mkPlayerWithRsp
+  :: RegisterPlayer
+  -> Var TestRsp v
+  -> PlayerWithRsp v
+mkPlayerWithRsp LeaderboardRegistration{..} rsp =
+  let
+    _pwrRsp = rsp
+    _pwrEmail = _lbrEmail
+    _pwrUsername = _lbrUsername
+    _pwrPassword = _lbrPassword
+    _pwrIsAdmin = _lbrIsAdmin
+  in
+    PlayerWithRsp{..}
 
 data TestMatch v =
   TestMatch

@@ -17,22 +17,35 @@ import           Database.Beam           (Auto (Auto))
 import           Leaderboard.Schema      (PlayerId)
 import qualified Leaderboard.Schema      as LS
 import           Leaderboard.SharedState (HasAdmins, PlayerMap, PlayerWithRsp,
-                                          TestRsp, admins)
-import           Leaderboard.Types       (RegisterPlayer (LeaderboardRegistration),
+                                          TestRsp, admins, HasPlayers, players)
+import           Leaderboard.Types       (RegisterPlayer (LeaderboardRegistration, _lbrEmail),
                                           RqMatch (RqMatch))
+
+genRegPlayerUniqueEmail ::
+  ( MonadGen n
+  , HasPlayers state
+  )
+  => state v
+  -> n RegisterPlayer
+genRegPlayerUniqueEmail state =
+  let
+    playerEmails = state ^. players & M.keysSet
+  in
+    Gen.filter ((`S.notMember` playerEmails) . _lbrEmail) genRegPlayer
 
 genRegPlayer
   :: MonadGen n
   => n RegisterPlayer
 genRegPlayer =
   let
-    genNonEmptyUnicode = Gen.text (Range.linear 1 20) Gen.unicode
+    genNonEmptyAlphaNum = Gen.text (Range.linear 1 20) Gen.alphaNum
   in
     LeaderboardRegistration
-      <$> genNonEmptyUnicode
-      <*> genNonEmptyUnicode
-      <*> genNonEmptyUnicode
+      <$> genNonEmptyAlphaNum
+      <*> genNonEmptyAlphaNum
+      <*> genNonEmptyAlphaNum
       <*> Gen.maybe Gen.bool
+
 
 -- | Generate a UTC time stamp stored as LocalTime. @beam-postgres@ barfs on UTCTime
 -- so doing this as a workaround for now.

@@ -11,9 +11,12 @@ module Leaderboard.RegistrationTests
   , cRegisterFirst
   , cRegister
   , cGetPlayerCount
+  , propRegFirst
   ) where
 
-import           Control.Lens              (anyOf, at, each, set, (&), (^.))
+import           Control.Lens              (anyOf, at, each, to, (&), (^.),
+                                            _Just, _Nothing)
+import           Control.Lens.Extras       (is)
 import           Control.Monad.IO.Class    (MonadIO)
 import           Data.Bool                 (bool)
 import qualified Data.Map                  as M
@@ -25,21 +28,23 @@ import           Servant.Client            (ClientEnv, ServantError (..))
 import           Hedgehog                  (Callback (..), Command (Command),
                                             Concrete (Concrete),
                                             HTraversable (htraverse), MonadGen,
-                                            MonadTest, Var (Var), annotateShow,
-                                            assert, evalEither, failure,
-                                            success, (===))
-import qualified Hedgehog.Gen              as Gen
-import qualified Hedgehog.Range            as Range
+                                            MonadTest, Symbolic, Var (Var),
+                                            annotateShow, assert, evalEither,
+                                            failure, success, (===))
 
 import           Test.Tasty                (TestTree, testGroup)
 
-import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp)
+import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp,
+                                            genRegPlayer,
+                                            genRegPlayerUniqueEmail)
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (HasAdmins (admins),
+import           Leaderboard.SharedState   (CanRegisterPlayers (..),
+                                            HasAdmins (admins),
+                                            HasPlayerCount (playerCount),
                                             HasPlayers (players),
-                                            LeaderboardState (..), PlayerMap,
-                                            PlayerWithRsp (..), SeqOrPara (..),
+                                            PlayerWithRsp (..),
+                                            RegFirstState (..), SeqOrPara (..),
                                             TestRsp (TestRsp), checkCommands,
                                             checkCommandsParallel, clientToken,
                                             emptyState, failureClient, pwrEmail,
@@ -61,34 +66,6 @@ registrationTests truncateTables env =
     , propParallel env truncateTables
     ]
 
-genRegPlayerRandomAdmin
-  :: MonadGen n
-  => PlayerMap v
-  -> n RegisterPlayer
-genRegPlayerRandomAdmin ps =
-  let
-    genNonEmptyAlphaNum = Gen.text (Range.linear 1 20) Gen.alphaNum
-  in
-    LeaderboardRegistration
-      <$> Gen.filter (`S.notMember` M.keysSet ps) genNonEmptyAlphaNum
-      <*> genNonEmptyAlphaNum
-      <*> genNonEmptyAlphaNum
-      <*> Gen.maybe Gen.bool
-
-mkPlayerWithRsp
-  :: RegisterPlayer
-  -> Var TestRsp v
-  -> PlayerWithRsp v
-mkPlayerWithRsp LeaderboardRegistration{..} rsp =
-  let
-    _pwrRsp = rsp
-    _pwrEmail = _lbrEmail
-    _pwrUsername = _lbrUsername
-    _pwrPassword = _lbrPassword
-    _pwrIsAdmin = _lbrIsAdmin
-  in
-    PlayerWithRsp{..}
-
 --------------------------------------------------------------------------------
 -- PLAYER COUNT
 --------------------------------------------------------------------------------
@@ -104,24 +81,22 @@ cGetPlayerCount
      ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayers state
-     , HasAdmins state
+     , HasPlayerCount state
      )
   => SeqOrPara
   -> ClientEnv
   -> Command n m state
 cGetPlayerCount sop env =
   let
-    canRun s = sop == Sequential || (s ^. players & not . null)
+    canRun s = sop == Sequential || (s ^. playerCount & (> 0))
     gen' = Just (pure GetPlayerCount)
     gen s = bool Nothing gen' $ canRun s
     exe _i = evalEither =<< successClient env (unPlayerCount <$> getPlayerCount)
   in
     Command gen exe [
       Require $ \s _i -> canRun s
-    , Ensure $ \s _sNew _i c -> do
-        length (s ^. players) === fromIntegral c
-        assert $ length (s ^. admins) <= fromIntegral c
+    , Ensure $ \s _sNew _i c ->
+        (s ^. playerCount) === fromIntegral c
     ]
 
 newtype Me (v :: * -> *) =
@@ -172,26 +147,21 @@ newtype RegFirst (v :: * -> *) =
 instance HTraversable RegFirst where
   htraverse _ (RegFirst rp)          = pure (RegFirst rp)
 
-newtype RegFirstForbidden (v :: * -> *) =
-  RegFirstForbidden RegisterPlayer
-  deriving (Eq, Show)
-instance HTraversable RegFirstForbidden where
-  htraverse _ (RegFirstForbidden rp) = pure (RegFirstForbidden rp)
-
 cRegisterFirst
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
-     , HasPlayers state
-     , HasAdmins state
+     , HasPlayerCount state
+     , CanRegisterPlayers state
      )
-  => ClientEnv
+  => (state Symbolic -> n RegisterPlayer)
+  -> ClientEnv
   -> Command n m state
-cRegisterFirst env =
+cRegisterFirst genRp env =
   let
     gen state =
-      if state ^. players & null
-      then Just . fmap RegFirst . genRegPlayerRandomAdmin $ state ^. players
+      if state ^. playerCount & (== 0)
+      then Just . fmap RegFirst . genRp $ state
       else Nothing
     execute (RegFirst rp) =
        -- Force admin flag to true so our local state always aligns with DB
@@ -199,33 +169,32 @@ cRegisterFirst env =
        in fmap TestRsp $ evalEither =<< successClient env cRp
   in
     Command gen execute [
-      Require $ \state _input -> state ^. players & null
-    , Update $ \state (RegFirst lbr@LeaderboardRegistration{..}) rsp ->
-        let
-          lbr' = lbr {_lbrIsAdmin = Just True}
-          ps = M.singleton _lbrEmail (mkPlayerWithRsp lbr' rsp)
-          as = S.singleton rsp
-         in
-          set players ps . set admins as $ state
-    , Ensure $ \_sOld sNew (RegFirst _rp) _t -> (sNew ^. players & length) === 1
+      Require $ \state _input -> state ^. playerCount & (== 0)
+    , Update $ \state (RegFirst lbr) rsp ->
+        registerPlayer state (lbr {_lbrIsAdmin = Just True}) rsp
+    , Ensure $ \_sOld sNew (RegFirst _rp) _t -> (sNew ^. playerCount) === 1
     ]
 
 cRegisterFirstForbidden
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
+     , HasPlayerCount state
+     , Eq (state Concrete)
+     , Show (state Concrete)
      )
-  => ClientEnv
-  -> Command n m LeaderboardState
-cRegisterFirstForbidden env =
+  => (state Symbolic -> n RegisterPlayer)
+  -> ClientEnv
+  -> Command n m state
+cRegisterFirstForbidden genRp env =
   let
-    gen (LeaderboardState ps _as _ms) =
-      bool (Just $ RegFirstForbidden <$> genRegPlayerRandomAdmin ps) Nothing $ null ps
-    execute (RegFirstForbidden rp) =
+    gen s =
+      bool (Just $ RegFirst <$> genRp s) Nothing $ s ^. playerCount . to (== 0)
+    execute (RegFirst rp) =
       evalEither =<< failureClient env (registerFirst rp)
   in
     Command gen execute [
-      Require $ \(LeaderboardState ps _as _ms) _input -> not (null ps)
+      Require $ \s _input -> s ^. playerCount . to (> 0)
     , Ensure $ \sOld sNew _input se -> do
         sOld === sNew
         case se of
@@ -249,45 +218,38 @@ cRegister
   :: ( MonadGen n
      , MonadIO m
      , MonadTest m
+     , HasAdmins state
+     , HasPlayers state
+     , HasPlayerCount state
+     , CanRegisterPlayers state
      )
   => ClientEnv
-  -> Command n m LeaderboardState
+  -> Command n m state
 cRegister env =
   let
-    gen rs@(LeaderboardState ps as _ms) =
-      if null as
+    gen state =
+      if state ^. admins & null
       then Nothing
-      else (Register <$> genRegPlayerRandomAdmin ps <*>) <$> genAdminWithRsp rs
+      else (Register <$> genRegPlayerUniqueEmail state <*>) <$> genAdminWithRsp state
     execute (Register rp rsp) =
       fmap TestRsp $ evalEither =<< successClient env (register (clientToken rsp) rp)
   in
     Command gen execute [
-      Require $ \(LeaderboardState ps _as _ms) (Register rp _p) ->
-        M.notMember (_lbrEmail rp) ps
-    , Require $ \(LeaderboardState _ps as _ms) (Register _rp p) ->
-        S.member p as
-    , Update $ \(LeaderboardState ps as ms) (Register rp@LeaderboardRegistration{..} _rqToken) rsp ->
-        let
-          newPlayers = M.insert _lbrEmail (mkPlayerWithRsp rp rsp) ps
-          newAdmins =
-            case _lbrIsAdmin of
-              Just True -> S.insert rsp as
-              _         -> as
-        in
-          LeaderboardState newPlayers newAdmins ms
-    , Ensure $ \(LeaderboardState psOld asOld _msOld)
-                (LeaderboardState psNew asNew _msNew)
-                (Register LeaderboardRegistration{..} _t)
-                rsp -> do
-        assert $ M.member _lbrEmail psNew
-        assert $ M.notMember _lbrEmail psOld
-        length psNew === length psOld + 1
+      Require $ \state (Register rp p) ->
+           (state ^. players & M.notMember (_lbrEmail rp))
+        && (state ^. admins & S.member p)
+    , Update $ \state (Register rp _rqToken) rsp ->
+        registerPlayer state rp rsp
+    , Ensure $ \sOld sNew (Register LeaderboardRegistration{..} _t) rsp -> do
+        sNew ^. players . at _lbrEmail & assert . is _Just
+        sOld ^. players . at _lbrEmail & assert . is _Nothing
+        sNew ^. playerCount === (sOld ^. playerCount & succ)
         let vRsp = Var (Concrete rsp)
         case _lbrIsAdmin of
           Just True -> do
-            assert $ S.member vRsp asNew
-            assert $ S.notMember vRsp asOld
-            length asNew === length asOld + 1
+            sNew ^. admins . at vRsp & assert . is _Just
+            sOld ^. admins . at vRsp & assert . is _Nothing
+            sNew ^. admins . to length === (sOld ^. admins . to length & succ)
           _ -> success
     ]
 
@@ -296,22 +258,40 @@ propRegFirst
   -> IO ()
   -> TestTree
 propRegFirst env reset =
-  checkCommands "register-first" reset emptyState $
-    ($ env) <$> [cRegisterFirst, cGetPlayerCount Sequential, cRegisterFirstForbidden]
+  let
+    genRp = const genRegPlayer
+  in
+    checkCommands "register-first" reset (RegFirstState 0) $
+      ($ env) <$> [cRegisterFirst genRp, cGetPlayerCount Sequential, cRegisterFirstForbidden genRp]
 
 propRegister
   :: ClientEnv
   -> IO ()
   -> TestTree
 propRegister env reset =
-  checkCommands "register-all" reset emptyState $
-    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount Sequential, cMe]
+  let
+    cs = ($ env) <$>
+      [ cRegister
+      , cRegisterFirst genRegPlayerUniqueEmail
+      , cRegisterFirstForbidden genRegPlayerUniqueEmail
+      , cGetPlayerCount Sequential
+      , cMe
+      ]
+  in
+    checkCommands "register-all" reset emptyState cs
 
 propParallel
   :: ClientEnv
   -> IO ()
   -> TestTree
 propParallel env reset =
-  checkCommandsParallel "register-parallel" reset emptyState $
-    ($ env) <$> [cRegister, cRegisterFirst, cRegisterFirstForbidden, cGetPlayerCount Parallel, cMe]
-
+  let
+    cs = ($ env) <$>
+      [ cRegister
+      , cRegisterFirst genRegPlayerUniqueEmail
+      , cRegisterFirstForbidden genRegPlayerUniqueEmail
+      , cGetPlayerCount Parallel
+      , cMe
+      ]
+  in
+    checkCommandsParallel "register-parallel" reset emptyState cs
