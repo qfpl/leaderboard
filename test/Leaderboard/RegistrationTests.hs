@@ -160,14 +160,12 @@ cRegisterFirst env =
       then Just . fmap RegFirst $ genRegPlayer
       else Nothing
     execute (RegFirst rp) =
-       -- Force admin flag to true so our local state always aligns with DB
        fmap TestRsp $ evalEither =<< successClient env (registerFirst rp)
   in
     Command gen execute [
       Require $ \(RegFirstState n) _input -> n == 0
     , Update $ \_state _input _out ->
         RegFirstState 1
-    , Ensure $ \_sOld (RegFirstState nNew) (RegFirst _rp) _t -> nNew === 1
     ]
 
 cRegisterFirstForbidden
@@ -188,8 +186,7 @@ cRegisterFirstForbidden env =
   in
     Command gen execute [
       Require $ \(RegFirstState n) _input -> (n > 0)
-    , Ensure $ \sOld sNew _input se -> do
-        sOld === sNew
+    , Ensure $ \_sOld _sNew _input se ->
         case se of
           FailureResponse{..} -> responseStatus === forbidden403
           _                   -> failure
