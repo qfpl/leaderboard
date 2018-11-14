@@ -1,17 +1,27 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeOperators   #-}
 
 module Main where
+
+
 
 import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
                                                 throwTo)
 import           Control.Exception             (Exception, bracket, throw)
 import           Control.Lens                  ((&), (.~))
 import qualified Control.Monad.Log             as Log
+import           Control.Monad.Log.Label       (Label)
 import           Database.Postgres.Temp        (DB (..), StartError,
                                                 startAndLogToTmp, stop)
 import           Network.Connection            (TLSSettings (..))
 import           Network.HTTP.Client.TLS       (mkManagerSettings,
                                                 newTlsManagerWith)
+import           Servant                       ((:~>), Application,
+                                                Context ((:.), EmptyContext),
+                                                Handler, enter,
+                                                serveWithContext)
+import           Servant.Auth.Server           (defaultCookieSettings,
+                                                defaultJWTSettings)
 import           Servant.Client                (BaseUrl (BaseUrl),
                                                 ClientEnv (..), Scheme (Https))
 import           System.Directory              (copyFile)
@@ -20,11 +30,14 @@ import           System.FilePath               ((</>))
 import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
 
+import           Leaderboard.Env               (Env, _envJWK)
 import           Leaderboard.JsonTests         (jsonTests)
 import           Leaderboard.Main              (doTheLeaderboard)
 import           Leaderboard.MatchTests        (matchTests)
 import           Leaderboard.RegistrationTests (registrationTests)
-import           Leaderboard.TestServer        (truncateTables)
+import           Leaderboard.Server            (LHandlerT, toHandler)
+import           Leaderboard.TestAPI       (testAPI, testServer)
+import           Leaderboard.TestHelpers       (truncateTables)
 import           Leaderboard.Types             (ApplicationOptions (..),
                                                 Command (..), command)
 
@@ -90,8 +103,8 @@ withLeaderboard ao@ApplicationOptions{..} =
     setupLeaderboard = do
       ready <- newEmptyMVar
       thread <- forkIO $ do
-        doTheLeaderboard Nothing aoMigrate
-        doTheLeaderboard (Just ready) ao
+        doTheLeaderboard testApp Nothing aoMigrate
+        doTheLeaderboard testApp (Just ready) ao
       takeMVar ready
       pure thread
     makeEnv = do
@@ -105,3 +118,17 @@ withLeaderboard ao@ApplicationOptions{..} =
       pure . ClientEnv tlsManager $ BaseUrl Https "localhost" _port ""
   in
     bracket setupLeaderboard (`throwTo` Shutdown) . const . (makeEnv >>=)
+
+testApp ::
+  Env
+  -> Log.Logger Label
+  -> Application
+testApp env logger =
+  let
+    jwtCfg = defaultJWTSettings (_envJWK env)
+    cfg = defaultCookieSettings :. jwtCfg :. EmptyContext
+    toHandler' :: LHandlerT Env Handler :~> Handler
+    toHandler' = toHandler env logger
+    server = testServer jwtCfg
+  in
+    serveWithContext testAPI cfg $ enter toHandler' server

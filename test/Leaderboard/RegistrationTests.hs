@@ -49,10 +49,10 @@ import           Leaderboard.SharedState   (CanRegisterPlayers (..),
                                             checkCommandsParallel, clientToken,
                                             emptyState, failureClient, pwrEmail,
                                             pwrUsername, successClient)
+import           Leaderboard.TestAPI       (PlayerCount (..))
 import           Leaderboard.TestClient    (getPlayerCount, me, register,
                                             registerFirst)
 import           Leaderboard.Types         (HasResponsePlayer (..),
-                                            PlayerCount (..),
                                             RegisterPlayer (..))
 
 registrationTests

@@ -84,17 +84,6 @@ instance FromJWT PlayerSession
 instance ToJSON PlayerSession
 instance FromJSON PlayerSession
 
-newtype PlayerCount
-  = PlayerCount { unPlayerCount :: Integer }
-  deriving (Eq, Generic, Show)
-instance FromJSON PlayerCount where
-  parseJSON =
-    withObject "PlayerCount" $ \v ->
-      PlayerCount <$> v .: "player-count"
-instance ToJSON PlayerCount where
-  toJSON (PlayerCount c) =
-    object ["player-count" .= c]
-
 -- | We're recreating what is already in @servant-auth-client@, however we need instances that it
 -- doesn't have, so this avoids the orphans.
 newtype Token
