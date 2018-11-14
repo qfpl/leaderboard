@@ -24,7 +24,7 @@ import           GHC.Generics                (Generic)
 import           Servant                     ((:<|>) ((:<|>)), (:>), Get, JSON,
                                               ServantErr, ServerT, err500,
                                               errBody)
-import           Servant.Auth.Server         (JWTSettings)
+import           Servant.Auth.Server         (JWTSettings, JWT)
 
 --import Leaderboard.API.Player (Pl)
 import           Leaderboard.API             (LeaderboardAPI, leaderboardServer)
@@ -43,7 +43,7 @@ testEndpoints ::
 testEndpoints = Proxy
 
 testAPI ::
-  Proxy (TestAPI auths)
+  Proxy (TestAPI '[JWT])
 testAPI = Proxy
 
 testServer ::

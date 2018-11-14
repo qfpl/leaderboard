@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-module Leaderboard.TestServer where
+module Leaderboard.TestHelpers where
 
 import           Control.Exception          (Exception)
 import           Control.Monad              (void)
