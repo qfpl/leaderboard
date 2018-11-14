@@ -7,49 +7,41 @@
 
 module Leaderboard.API.Player where
 
-import           Control.Monad.Except                   (MonadError, throwError)
-import           Control.Monad.IO.Class                 (liftIO)
-import           Control.Monad.Log                      (MonadLog)
-import qualified Control.Monad.Log                      as Log
-import           Control.Monad.Log.Label                (Label (Label),
-                                                         withLabel)
-import           Control.Monad.Reader
-import           Control.Monad.Trans.Control            (MonadBaseControl)
-import           Crypto.Scrypt                          (EncryptedPass (..),
-                                                         Pass (..), verifyPass')
-import           Data.Bool                              (bool)
-import qualified Data.ByteString.Lazy.Char8             as BSL8
-import           Data.Proxy                             (Proxy (Proxy))
-import           Data.Semigroup                         ((<>))
-import qualified Data.Text                              as T
-import           Data.Text.Encoding                     (encodeUtf8)
-import           Database.Beam                          (unAuto)
-import           Servant                                ((:<|>) ((:<|>)), (:>),
-                                                         Get, JSON, Post,
-                                                         ReqBody, ServantErr,
-                                                         ServerT, err401,
-                                                         err403, err500,
-                                                         errBody)
-import           Servant.Auth.Server                    (Auth, AuthResult,
-                                                         JWTSettings, makeJWT)
+import           Control.Monad               ((<=<))
+import           Control.Monad.Except        (MonadError, throwError)
+import           Control.Monad.IO.Class      (liftIO)
+import           Control.Monad.Log           (MonadLog)
+import qualified Control.Monad.Log           as Log
+import           Control.Monad.Log.Label     (Label (Label), withLabel)
+import           Control.Monad.Reader        (MonadReader)
+import           Control.Monad.Trans.Control (MonadBaseControl)
+import           Crypto.Scrypt               (EncryptedPass (..), Pass (..),
+                                              verifyPass')
+import           Data.Bool                   (bool)
+import qualified Data.ByteString.Lazy.Char8  as BSL8
+import           Data.Proxy                  (Proxy (Proxy))
+import           Data.Semigroup              ((<>))
+import qualified Data.Text                   as T
+import           Data.Text.Encoding          (encodeUtf8)
+import           Database.Beam               (unAuto)
+import           Servant                     ((:<|>) ((:<|>)), (:>), Get, JSON,
+                                              Post, ReqBody, ServantErr,
+                                              ServerT, err401, err403, err500,
+                                              errBody)
+import           Servant.Auth.Server         (Auth, AuthResult, JWTSettings,
+                                              makeJWT)
 
-import           Leaderboard.Env                        (HasDbConnPool,
-                                                         asPlayer,
-                                                         withAuthConnAndLog,
-                                                         withConn)
-import           Leaderboard.Queries                    (insertPlayer,
-                                                         selectPlayerByEmail,
-                                                         selectPlayerById,
-                                                         selectPlayerCount)
-import           Leaderboard.Schema                     (Player, PlayerT (..))
-import qualified Leaderboard.Schema                     as LS
-import           Leaderboard.Types                      (LeaderboardError (PlayerExists),
-                                                         Login (..),
-                                                         PlayerCount (PlayerCount),
-                                                         PlayerSession (..),
-                                                         RegisterPlayer (..),
-                                                         ResponsePlayer (..),
-                                                         Token (..))
+import           Leaderboard.Env             (HasDbConnPool, asPlayer,
+                                              withAuthConnAndLog, withConn)
+import           Leaderboard.Queries         (insertPlayer, selectPlayerByEmail,
+                                              selectPlayerById,
+                                              selectPlayerCount)
+import           Leaderboard.Schema          (Player, PlayerT (..))
+import qualified Leaderboard.Schema          as LS
+import           Leaderboard.Types           (LeaderboardError (PlayerExists),
+                                              Login (..), PlayerSession (..),
+                                              RegisterPlayer (..),
+                                              ResponsePlayer (..), Token (..))
 
 type PlayerAPI auths =
   "player" :> (
@@ -57,7 +49,6 @@ type PlayerAPI auths =
   :<|> "register-first" :> ReqBody '[JSON] RegisterPlayer :> Post '[JSON] ResponsePlayer
   :<|> Auth auths PlayerSession :> "me" :> Get '[JSON] Player
   :<|> "authenticate" :> ReqBody '[JSON] Login :> Post '[JSON] Token
-  :<|> "count" :> Get '[JSON] PlayerCount
   )
 
 playerAPI :: Proxy (PlayerAPI auths)
@@ -77,7 +68,6 @@ playerServer jwts =
   :<|> registerFirst jwts
   :<|> me
   :<|> authenticate jwts
-  :<|> count
 
 register
   :: ( HasDbConnPool r
@@ -186,17 +176,6 @@ authenticate jwts Login{..} =
         then playerId p >>= makeToken jwts
         else throwLoginFail ("Bad password" :: T.Text)
 
-count
-  :: ( HasDbConnPool r
-     , MonadBaseControl IO m
-     , MonadError ServantErr m
-     , MonadReader r m
-     , MonadLog Label m
-     )
-  => m PlayerCount
-count =
-  withLabel (Label "/player-count") $ PlayerCount <$> getPlayerCount
-
 insertPlayer'
   :: ( HasDbConnPool r
      , MonadBaseControl IO m
@@ -214,22 +193,6 @@ insertPlayer' rp =
       throwError $ err500 {errBody = "Error registering player"}
   ep <- withConn $ \conn -> liftIO $ insertPlayer conn Nothing rp
   either throwNoPlayer pure ep
-
-getPlayerCount
-  :: ( HasDbConnPool r
-     , MonadBaseControl IO m
-     , MonadError ServantErr m
-     , MonadReader r m
-     , MonadLog Label m
-     )
-  => m Integer
-getPlayerCount = do
-  let
-    throwNoPlayerCount e = do
-      Log.error $ "Error retrieving player count: " <> (T.pack . show $ e)
-      throwError err500 { errBody = "Error retrieving player count" }
-  en <- withConn $ liftIO . selectPlayerCount
-  either throwNoPlayerCount pure en
 
 playerId
   :: ( MonadError ServantErr m

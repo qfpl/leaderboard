@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
 
@@ -28,6 +29,7 @@ import           Options.Applicative         (Parser, ParserInfo, ReadM,
                                               helper, info, long, maybeReader,
                                               metavar, option, progDesc,
                                               strOption, value, (<**>))
+import           Servant.Server              (Application)
 import           System.Environment
 import           System.Exit                 (ExitCode (ExitFailure), exitWith)
 
@@ -86,7 +88,7 @@ commandLineOptionsParser =
 readLogLevel
   :: ReadM Log.Level
 readLogLevel =
-  maybeReader $ \s -> case s of
+  maybeReader $ \case
     "debig"    -> Just Log.levelDebug
     "info"     -> Just Log.levelInfo
     "warning"  -> Just Log.levelWarning
@@ -105,13 +107,14 @@ main = do
   co <- execParser parserInfo
   -- TODO ajmccluskey: we might not need a pass, so use the maybe version of this and blank pass on Nothing
   password <- getEnv "DBPASS"
-  doTheLeaderboard Nothing $ fromCmdLineOpts co password
+  doTheLeaderboard leaderboard Nothing $ fromCmdLineOpts co password
 
 doTheLeaderboard
-  :: Maybe (MVar ())
+  :: (Env -> Log.Logger Label -> Application)
+  -> Maybe (MVar ())
   -> ApplicationOptions
   -> IO ()
-doTheLeaderboard ready ao@ApplicationOptions{..} = do
+doTheLeaderboard appFn ready ao@ApplicationOptions{..} = do
   let logLevel = fromMaybe defaultLogLevel _logLevel
   logger <-
     Log.makeDefaultLogger Log.simpleTimeFormat (Log.LogStdout 4096) logLevel (Label "unlabeled")
@@ -123,7 +126,7 @@ doTheLeaderboard ready ao@ApplicationOptions{..} = do
       MigrateDb -> liftIO $
         withResource pool createSchema >>=
           either print (const $ putStrLn "Migrated successfully")
-      RunApp    -> runApp ready pool _port
+      RunApp    -> runApp appFn ready pool _port
 
 addDbPass
   :: ConnectInfoSansPass
@@ -134,18 +137,19 @@ addDbPass ConnectInfoSansPass{..} pass =
    in ConnectInfo{..}
 
 runApp
-  :: Maybe (MVar ())
+  :: (Env -> Log.Logger Label -> Application)
+  -> Maybe (MVar ())
   -> Pool Connection
   -> Int
   -> LogT Label IO ()
-runApp ready pool port = do
+runApp app ready pool port = do
     logger <- askLogger
     Log.info "Creating/retrieving JWK"
     jwk <- liftIO $ withResource pool (`selectOrPersistJwk` genJwk)
     let
       tlsOpts = tlsSettings "cert.pem" "key.pem"
       warpOpts = setPort port defaultSettings
-      doIt jwk' = liftIO . runTLS tlsOpts warpOpts $ leaderboard (Env pool jwk') logger
+      doIt jwk' = liftIO . runTLS tlsOpts warpOpts $ app (Env pool jwk') logger
       exitFail e = do
         Log.error $ "Error with JWK: " <> (pack . show $ e)
         liftIO . exitWith . ExitFailure $ 1
