@@ -259,21 +259,20 @@ propRegFirst env reset =
   evalIO reset
   executeSequential initialState actions
 
--- propRegister
---   :: ClientEnv
---   -> IO ()
---   -> TestTree
--- propRegister env reset =
---   let
---     cs = ($ env) <$>
---       [ cRegister
---       , cRegisterFirst genRegPlayerUniqueEmail
---       , cRegisterFirstForbidden genRegPlayerUniqueEmail
---       , cGetPlayerCount Sequential
---       , cMe
---       ]
---   in
---     checkCommands "register-all" reset emptyState cs
+propRegister
+  :: ClientEnv
+  -> IO ()
+  -> TestTree
+propRegister env reset =
+  let
+    cs = ($ env) <$>
+      [ cRegister
+      , cRegisterFirst
+      , cRegisterFirstForbidden
+      , cGetPlayerCount
+      ]
+  in
+    checkCommands "register-all" reset emptyState cs
 
 -- propParallel
 --   :: ClientEnv
