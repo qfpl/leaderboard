@@ -53,6 +53,12 @@ newtype RegFirstState (v :: * -> *) =
   RegFirstState Integer
   deriving (Eq, Show)
 
+data RegisterState (v :: * -> *) =
+  RegisterState
+  { rsPlayerEmails :: S.Set Text
+  , rsAdmins :: S.Set (Var TestRsp v)
+  } deriving (Eq, Show)
+
 class CanRegisterPlayers (s :: (* -> *) -> *) where
   registerPlayer ::
     Ord1 v
