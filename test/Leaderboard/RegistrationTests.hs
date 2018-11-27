@@ -202,7 +202,7 @@ data Register (v :: * -> *) =
 
 instance HTraversable Register where
   htraverse f (Register rp (Var rsp)) =
-    Register rp <$> (Var <$> f rsp)
+    Register rp . Var <$> f rsp
 
 cRegister
   :: ( MonadGen n
