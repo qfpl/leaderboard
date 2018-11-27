@@ -9,6 +9,7 @@ import qualified Hedgehog.Range          as Range
 import           Control.Lens            ((&), (^.))
 import qualified Data.Map                as M
 import qualified Data.Set                as S
+import           Data.Text               (Text)
 import           Data.Time               (LocalTime, UTCTime (UTCTime),
                                           fromGregorian, secondsToDiffTime, utc,
                                           utcToLocalTime)
@@ -16,22 +17,21 @@ import           Database.Beam           (Auto (Auto))
 
 import           Leaderboard.Schema      (PlayerId)
 import qualified Leaderboard.Schema      as LS
-import           Leaderboard.SharedState (HasAdmins, PlayerMap, PlayerWithRsp,
-                                          TestRsp, admins, HasPlayers, players)
+import           Leaderboard.SharedState (HasAdmins, HasPlayers, PlayerMap,
+                                          PlayerWithRsp,
+                                          RegisterState (RegisterState),
+                                          TestRsp, admins, players)
 import           Leaderboard.Types       (RegisterPlayer (LeaderboardRegistration, _lbrEmail),
                                           RqMatch (RqMatch))
 
 genRegPlayerUniqueEmail ::
   ( MonadGen n
-  , HasPlayers state
+  --, HasPlayers state
   )
-  => state v
+  => S.Set Text
   -> n RegisterPlayer
-genRegPlayerUniqueEmail state =
-  let
-    playerEmails = state ^. players & M.keysSet
-  in
-    Gen.filter ((`S.notMember` playerEmails) . _lbrEmail) genRegPlayer
+genRegPlayerUniqueEmail ps =
+  Gen.filter ((`S.notMember` ps) . _lbrEmail) genRegPlayer
 
 genRegPlayer
   :: MonadGen n
@@ -83,18 +83,18 @@ genRqMatch = do
 
 genAdminWithRsp
   :: ( MonadGen n
-     , HasAdmins s
+     -- , HasAdmins s
      )
-  => s v
+  => S.Set (Var TestRsp v)
   -> Maybe (n (Var TestRsp v))
-genAdminWithRsp s =
+genAdminWithRsp as =
   -- TODO ajmccluskey: be better
   -- Emails in admin _must_ be a subset of those in players. Without a Traversable
   -- instance for Gen I couldn't make this be not partial.
-  if null (s ^. admins)
+  if null as
   then Nothing
   else Just $
-    s ^. admins & Gen.element . S.toList
+    Gen.element . S.toList $ as
 
 genPlayerWithRsp
   :: MonadGen n

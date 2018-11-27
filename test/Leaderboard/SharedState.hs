@@ -55,7 +55,7 @@ newtype RegFirstState (v :: * -> *) =
 
 data RegisterState (v :: * -> *) =
   RegisterState
-  { rsPlayerCount :: Integer
+  { rsPlayerEmails :: S.Set Text
   , rsAdmins :: S.Set (Var TestRsp v)
   } deriving (Eq, Show)
 
