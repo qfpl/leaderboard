@@ -37,18 +37,20 @@ import qualified Hedgehog.Range            as Range
 import           Test.Tasty                (TestTree, testGroup)
 import           Test.Tasty.Hedgehog       (testProperty)
 
-import           Leaderboard.Gens          (genAdminWithRsp, genPlayerWithRsp,
+import           Leaderboard.Gens          (genAdminRsp, genPlayerWithRsp,
                                             genRegPlayer,
                                             genRegPlayerUniqueEmail)
 import           Leaderboard.Schema        (PlayerT (..))
 import qualified Leaderboard.Schema        as LS
-import           Leaderboard.SharedState   (CanRegisterPlayers (..), RegisterState (RegisterState),
+import           Leaderboard.SharedState   (CanRegisterPlayers (..),
                                             HasAdmins (admins),
                                             HasPlayerCount (playerCount),
                                             HasPlayers (players),
                                             PlayerWithRsp (..),
-                                            RegFirstState (..), SeqOrPara (..),
-                                            TestRsp (TestRsp), checkCommands,
+                                            RegFirstState (..),
+                                            RegisterState (RegisterState),
+                                            SeqOrPara (..), TestRsp (TestRsp),
+                                            checkCommands,
                                             checkCommandsParallel, clientToken,
                                             emptyState, failureClient, pwrEmail,
                                             pwrUsername, successClient)
@@ -216,7 +218,7 @@ cRegister env =
     gen (RegisterState ps as) =
       if null as
       then Nothing
-      else (Register <$> genRegPlayerUniqueEmail ps <*>) <$> genAdminWithRsp as
+      else (Register <$> genRegPlayerUniqueEmail ps <*>) <$> genAdminRsp as
     execute (Register rp rsp) =
       fmap TestRsp $ evalEither =<< successClient env (register (clientToken rsp) rp)
   in
@@ -266,8 +268,9 @@ propRegister
   -> IO ()
   -> TestTree
 propRegister env reset =
+  testProperty "register-all" . property $ do
   let
-    cs = ($ env) <$>
+    commands = ($ env) <$>
       [ cRegister
       , cRegisterFirst
       , cRegisterFirstForbidden
@@ -275,8 +278,10 @@ propRegister env reset =
       ]
     initialState =
       RegisterState S.empty S.empty
-  in
-    checkCommands "register-all" reset initialState cs
+  actions <- forAll $
+    Gen.sequential (Range.linear 1 100) initialState commands
+  evalIO reset
+  executeSequential initialState actions
 
 -- propParallel
 --   :: ClientEnv

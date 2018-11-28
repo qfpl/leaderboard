@@ -81,16 +81,11 @@ genRqMatch = do
   score2 <- (+ score1) <$> Gen.element [2, -2]
   RqMatch p1 p2 score1 score2 <$> genTimestamp
 
-genAdminWithRsp
-  :: ( MonadGen n
-     -- , HasAdmins s
-     )
+genAdminRsp
+  :: MonadGen n
   => S.Set (Var TestRsp v)
   -> Maybe (n (Var TestRsp v))
-genAdminWithRsp as =
-  -- TODO ajmccluskey: be better
-  -- Emails in admin _must_ be a subset of those in players. Without a Traversable
-  -- instance for Gen I couldn't make this be not partial.
+genAdminRsp as =
   if null as
   then Nothing
   else Just $
