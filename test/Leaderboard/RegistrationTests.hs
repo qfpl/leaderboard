@@ -232,11 +232,13 @@ cRegister env =
           newAs = bool as (S.insert rsp as) (_lbrIsAdmin rp == Just True)
         in
           RegisterState newPs newAs
-    , Ensure $ \(RegisterState psOld asOld) (RegisterState psNew asNew)
-          (Register LeaderboardRegistration{..} _t) rsp -> do
+    , Ensure $ \(RegisterState psOld _) (RegisterState psNew _)
+          (Register LeaderboardRegistration{..} _t) _ -> do
         assert $ S.member _lbrEmail psNew
         assert $ S.notMember _lbrEmail psOld
         length psNew === length psOld + 1
+    , Ensure $ \(RegisterState _ asOld) (RegisterState _ asNew)
+          (Register LeaderboardRegistration{..} _t) rsp -> do
         let vRsp = Var (Concrete rsp)
         if _lbrIsAdmin == Just True
           then do
