@@ -83,22 +83,19 @@ withDb
 withDb f =
   bracket
     (startAndLogDbInDirectory [])
-    (splode stop')
+    (splode stop)
     (splode f)
   where
-    splode g r = do
-      case r of
-        Left e   -> throw . PgTempStartError $ e
-        Right db -> g db
-    stop' db = do
-      stop db
+    splode g = \case
+      Left e   -> throw . PgTempStartError $ e
+      Right db -> g db
 
 startAndLogDbInDirectory ::
   [(String, String)]
   -> IO (Either StartError DB)
 startAndLogDbInDirectory options = do
-  stdOutFile <- openFile ("./tmp-postgres-output.txt") WriteMode
-  stdErrFile <- openFile ("./tmp-postgres-error.txt") WriteMode
+  stdOutFile <- openFile "./tmp-postgres-output.txt" WriteMode
+  stdErrFile <- openFile "./tmp-postgres-error.txt" WriteMode
 
   startWithHandles Unix options stdOutFile stdErrFile
 
