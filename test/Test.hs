@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators   #-}
 
@@ -11,8 +12,9 @@ import           Control.Exception             (Exception, bracket, throw)
 import           Control.Lens                  ((&), (.~))
 import qualified Control.Monad.Log             as Log
 import           Control.Monad.Log.Label       (Label)
-import           Database.Postgres.Temp        (DB (..), StartError,
-                                                startAndLogToTmp, stop)
+import           Database.Postgres.Temp        (DB (..), SocketClass (Unix),
+                                                StartError, startWithHandles,
+                                                stop)
 import           Network.Connection            (TLSSettings (..))
 import           Network.HTTP.Client.TLS       (mkManagerSettings,
                                                 newTlsManagerWith)
@@ -24,8 +26,7 @@ import           Servant.Auth.Server           (defaultCookieSettings,
                                                 defaultJWTSettings)
 import           Servant.Client                (BaseUrl (BaseUrl),
                                                 ClientEnv (..), Scheme (Https))
-import           System.Directory              (copyFile)
-import           System.FilePath               ((</>))
+import           System.IO                     (IOMode (WriteMode), openFile)
 
 import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
@@ -80,18 +81,22 @@ withDb
   -> IO a
 withDb f =
   bracket
-    (startAndLogToTmp [])
-    (splode stop')
+    (startAndLogDbInDirectory [])
+    (splode stop)
     (splode f)
   where
-    splode g r =
-      case r of
-        Left e   -> throw . PgTempStartError $ e
-        Right db -> g db
-    stop' db@DB{..} = do
-      copyFile (mainDir </> "output.txt") "tmp-postgres-output.txt"
-      copyFile (mainDir </> "error.txt") "tmp-postgres-error.txt"
-      stop db
+    splode g = \case
+      Left e   -> throw . PgTempStartError $ e
+      Right db -> g db
+
+startAndLogDbInDirectory ::
+  [(String, String)]
+  -> IO (Either StartError DB)
+startAndLogDbInDirectory options = do
+  stdOutFile <- openFile "./tmp-postgres-output.txt" WriteMode
+  stdErrFile <- openFile "./tmp-postgres-error.txt" WriteMode
+
+  startWithHandles Unix options stdOutFile stdErrFile
 
 withLeaderboard
   :: ApplicationOptions
