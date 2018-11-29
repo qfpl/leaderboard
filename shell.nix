@@ -12,8 +12,9 @@ let
                 drv.executableHaskellDepends ++
                 drv.testHaskellDepends;
               })
-          ] ++
-          (with env.haskellPackages; [ghcid cabal-install]);
+          ]
+          ++ [env.pkgs.postgresql]
+          ++ (with env.haskellPackages; [ghcid cabal-install]);
       });
 in
   if env.pkgs.lib.inNixShell then drv.env else drv

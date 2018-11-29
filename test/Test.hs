@@ -11,8 +11,9 @@ import           Control.Exception             (Exception, bracket, throw)
 import           Control.Lens                  ((&), (.~))
 import qualified Control.Monad.Log             as Log
 import           Control.Monad.Log.Label       (Label)
-import           Database.Postgres.Temp        (DB (..), StartError,
-                                                startAndLogToTmp, stop)
+import           Database.Postgres.Temp        (DB (..), SocketClass (Unix),
+                                                StartError, startWithHandles,
+                                                stop)
 import           Network.Connection            (TLSSettings (..))
 import           Network.HTTP.Client.TLS       (mkManagerSettings,
                                                 newTlsManagerWith)
@@ -26,6 +27,7 @@ import           Servant.Client                (BaseUrl (BaseUrl),
                                                 ClientEnv (..), Scheme (Https))
 import           System.Directory              (copyFile)
 import           System.FilePath               ((</>))
+import           System.IO                     (IOMode (WriteMode), openFile)
 
 import           Test.Tasty                    (TestTree, defaultMain,
                                                 testGroup)
@@ -36,7 +38,7 @@ import           Leaderboard.Main              (doTheLeaderboard)
 import           Leaderboard.MatchTests        (matchTests)
 import           Leaderboard.RegistrationTests (registrationTests)
 import           Leaderboard.Server            (LHandlerT, toHandler)
-import           Leaderboard.TestAPI       (testAPI, testServer)
+import           Leaderboard.TestAPI           (testAPI, testServer)
 import           Leaderboard.TestHelpers       (truncateTables)
 import           Leaderboard.Types             (ApplicationOptions (..),
                                                 Command (..), command)
@@ -80,18 +82,25 @@ withDb
   -> IO a
 withDb f =
   bracket
-    (startAndLogToTmp [])
+    (startAndLogDbInDirectory [])
     (splode stop')
     (splode f)
   where
-    splode g r =
+    splode g r = do
       case r of
         Left e   -> throw . PgTempStartError $ e
         Right db -> g db
-    stop' db@DB{..} = do
-      copyFile (mainDir </> "output.txt") "tmp-postgres-output.txt"
-      copyFile (mainDir </> "error.txt") "tmp-postgres-error.txt"
+    stop' db = do
       stop db
+
+startAndLogDbInDirectory ::
+  [(String, String)]
+  -> IO (Either StartError DB)
+startAndLogDbInDirectory options = do
+  stdOutFile <- openFile ("./tmp-postgres-output.txt") WriteMode
+  stdErrFile <- openFile ("./tmp-postgres-error.txt") WriteMode
+
+  startWithHandles Unix options stdOutFile stdErrFile
 
 withLeaderboard
   :: ApplicationOptions
