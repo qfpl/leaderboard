@@ -1,9 +1,8 @@
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators   #-}
 
 module Main where
-
-
 
 import           Control.Concurrent            (forkIO, newEmptyMVar, takeMVar,
                                                 throwTo)
@@ -25,8 +24,6 @@ import           Servant.Auth.Server           (defaultCookieSettings,
                                                 defaultJWTSettings)
 import           Servant.Client                (BaseUrl (BaseUrl),
                                                 ClientEnv (..), Scheme (Https))
-import           System.Directory              (copyFile)
-import           System.FilePath               ((</>))
 import           System.IO                     (IOMode (WriteMode), openFile)
 
 import           Test.Tasty                    (TestTree, defaultMain,
